@@ -3,7 +3,8 @@
 import uuid
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,14 +23,18 @@ access_token_verifier = TokenGenerator(
 )
 
 
+# Security scheme to enable "Authorize" button in Swagger
+reusable_oauth2 = HTTPBearer()
+
+
 async def get_current_user(
-    authorization: Annotated[str | None, Header()] = None,
+    auth: Annotated[HTTPAuthorizationCredentials, Depends(reusable_oauth2)],
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """Get current authenticated user from JWT token
 
     Args:
-        authorization: Authorization header with Bearer token
+        auth: Bearer token from Authorization header
         session: Database session
 
     Returns:
@@ -38,15 +43,7 @@ async def get_current_user(
     Raises:
         Unauthorized: If token is missing or invalid
     """
-    if not authorization:
-        raise Unauthorized("Authorization header missing")
-
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise Unauthorized("Invalid authorization header format")
-
-    token = parts[1]
+    token = auth.credentials
 
     # Verify token and extract user ID
     user_id_str = await access_token_verifier.verify(token, "access")
