@@ -16,25 +16,24 @@ from app.users.models import User, UserRole
 
 settings = get_settings()
 
+# Define security scheme
+security = HTTPBearer()
+
 # Access token verifier
 access_token_verifier = TokenGenerator(
     secret_key=settings.SECRET_KEY,
-    expire_in=15,  # Not used for verification, but required by TokenGenerator
+    expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,  # Not used for verification, but required by TokenGenerator
 )
 
 
-# Security scheme to enable "Authorize" button in Swagger
-reusable_oauth2 = HTTPBearer()
-
-
 async def get_current_user(
-    auth: Annotated[HTTPAuthorizationCredentials, Depends(reusable_oauth2)],
+    token_creds: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """Get current authenticated user from JWT token
 
     Args:
-        auth: Bearer token from Authorization header
+        token_creds: HTTPBearer credentials (automatically extracts "Bearer <token>")
         session: Database session
 
     Returns:
@@ -43,10 +42,10 @@ async def get_current_user(
     Raises:
         Unauthorized: If token is missing or invalid
     """
-    token = auth.credentials
+    token = token_creds.credentials
 
     # Verify token and extract user ID
-    user_id_str = await access_token_verifier.verify(token, "access")
+    user_id_str = await access_token_verifier.verify(token, "user")
 
     if not user_id_str:
         raise Unauthorized("Invalid access token")

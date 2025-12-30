@@ -107,9 +107,6 @@ async def add_security_headers(request, call_next):
 
     return response
 
-
-
-
 # Exception Handlers
 app.add_exception_handler(Exception, base_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore

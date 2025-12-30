@@ -22,12 +22,12 @@ ph = PasswordHasher()
 # Token generators
 access_token_generator = TokenGenerator(
     secret_key=settings.SECRET_KEY,
-    expire_in=15,  # 15 minutes
+    expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 
 refresh_token_generator = TokenGenerator(
     secret_key=settings.SECRET_KEY,
-    expire_in=10080,  # 7 days (7 * 24 * 60 minutes)
+    expire_in=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
 )
 
 
@@ -129,7 +129,7 @@ async def create_refresh_token(session: AsyncSession, user: User) -> str:
     refresh_token = RefreshToken(
         token_hash=token_hash,
         user_id=user.id,
-        expires_at=datetime.utcnow() + timedelta(days=7),
+        expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
 
     session.add(refresh_token)

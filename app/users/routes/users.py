@@ -57,8 +57,8 @@ async def update_current_user_profile(
 async def update_user_role_endpoint(
     user_id: uuid.UUID,
     role_data: UserRoleUpdate,
+    admin_user: AdminUser,
     session: AsyncSession = Depends(get_session),
-    admin_user: AdminUser = None,  # AdminUser already includes Depends
 ):
     """Update user role (Admin only)"""
     user = await update_user_role(session, user_id, role_data.role)

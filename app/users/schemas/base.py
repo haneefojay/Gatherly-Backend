@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.users.models import UserRole
 
@@ -21,15 +21,17 @@ class UserCreate(UserBase):
     password: str
     role: UserRole = UserRole.USER
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {
                 "email": "user@example.com",
                 "full_name": "John Doe",
                 "password": "SecurePass123!",
                 "role": "user",
             }
-        }
+        },
+    )
 
 
 class UserUpdate(BaseModel):
@@ -38,13 +40,15 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     email: EmailStr | None = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {
                 "full_name": "Jane Doe",
                 "email": "jane@example.com",
             }
-        }
+        },
+    )
 
 
 class UserResponse(UserBase):
@@ -56,9 +60,9 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "email": "user@example.com",
@@ -68,7 +72,8 @@ class UserResponse(UserBase):
                 "created_at": "2024-01-01T00:00:00",
                 "updated_at": "2024-01-01T00:00:00",
             }
-        }
+        },
+    )
 
 
 class UserRoleUpdate(BaseModel):
@@ -76,5 +81,7 @@ class UserRoleUpdate(BaseModel):
 
     role: UserRole
 
-    class Config:
-        json_schema_extra = {"example": {"role": "organizer"}}
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"example": {"role": "organizer"}},
+    )
