@@ -10,6 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 from secure import Secure
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
@@ -22,6 +23,7 @@ from app.core.handlers import (
     bad_gateway_error_exception_handler,
     base_exception_handler,
     custom_http_exception_handler,
+    integrity_error_exception_handler,
     internal_server_error_exception_handler,
     request_validation_exception_handler,
 )
@@ -113,6 +115,7 @@ app.add_exception_handler(RequestValidationError, request_validation_exception_h
 app.add_exception_handler(InternalServerError, internal_server_error_exception_handler)  # type: ignore
 app.add_exception_handler(BadGatewayError, bad_gateway_error_exception_handler)  # type: ignore
 app.add_exception_handler(CustomHTTPException, custom_http_exception_handler)  # type: ignore
+app.add_exception_handler(IntegrityError, integrity_error_exception_handler)  # type: ignore
 
 
 # Logfire Config
@@ -135,7 +138,6 @@ async def health(_: AsyncSession = Depends(get_session)):
 # Include routers
 app.include_router(
     users_router,
-    tags=["Users & Authentication"],
     dependencies=[Depends(RateLimiter(times=REQ_RATE, seconds=REQ_RATE_TIME))],
 )
 

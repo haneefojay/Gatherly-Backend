@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import relationship
@@ -82,6 +83,7 @@ class Event(DBBase):
     __table_args__ = (
         Index("ix_events_search_vector", "search_vector", postgresql_using="gin"),
         Index("ix_events_status_start_date", "status", "start_date"),
+        UniqueConstraint("title", "start_date", "location", name="uq_event_title_date_loc"),
     )
 
     def __repr__(self):

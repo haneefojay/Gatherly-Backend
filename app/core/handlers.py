@@ -10,8 +10,34 @@ from app.common.exceptions import (
 )
 from app.core.settings import get_settings
 
-# Globals
 settings = get_settings()
+
+from sqlalchemy.exc import IntegrityError
+
+
+async def integrity_error_exception_handler(_: Request, exc: IntegrityError):
+    """
+    Exception handler for database integrity errors (unique constraints, foreign keys)
+    """
+    error_info = str(exc.orig) if exc.orig else str(exc)
+
+    if "uq_event_title_date_loc" in error_info:
+        msg = "An event with this title, start date, and location already exists."
+    elif "unique constraint" in error_info.lower() or "duplicate key" in error_info.lower():
+        msg = "A record with these unique details already exists."
+    else:
+        msg = "Database integrity error."
+
+    return ORJSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content=jsonable_encoder(
+            {
+                "status": "error",
+                "error": {"msg": msg, "loc": []},
+                "data": None,
+            }
+        ),
+    )
 
 
 async def base_exception_handler(_: Request, exc: Exception):
