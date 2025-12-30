@@ -1,5 +1,4 @@
 # type: ignore
-import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,22 +7,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """The settings for the application."""
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # App
-    DEBUG: bool = os.environ.get("DEBUG")
+    DEBUG: bool = True
 
     # Logfire
-    LOGFIRE_TOKEN: str | None = os.environ.get("LOGFIRE_TOKEN")
+    LOGFIRE_TOKEN: str | None = None
 
     # DB Settings
-    POSTGRES_DATABASE_URL: str = os.environ.get("POSTGRES_DATABASE_URL")
+    POSTGRES_DATABASE_URL: str
 
     # REDIS
-    REDIS_BROKER_URL: str = os.environ.get("REDIS_BROKER_URL")
+    REDIS_BROKER_URL: str
 
     # JWT
-    SECRET_KEY: str = os.environ.get("SECRET_KEY")
+    SECRET_KEY: str
 
 
 @lru_cache

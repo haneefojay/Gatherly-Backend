@@ -7,11 +7,10 @@ from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import ORJSONResponse
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 from secure import Secure
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
 from app.common.exceptions import (
@@ -28,7 +27,10 @@ from app.core.handlers import (
 )
 from app.core.settings import get_settings
 from app.core.tags import RouteTags
-from app.sample_module.apis import router as sample_router
+from app.users.apis import router as users_router
+from app.events.apis import router as events_router
+from app.tasks.apis import router as tasks_router
+from app.attendees.apis import router as attendees_router
 
 # Globals
 tags = RouteTags()
@@ -62,10 +64,11 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Behemoth FastAPI",
+    title="Event Management API",
+    description="Production-ready Event Management API with JWT authentication, RBAC, and advanced features",
+    version="1.0.0",
     lifespan=lifespan,
-    default_response_class=ORJSONResponse,
-    docs_url="/" if settings.DEBUG else None,
+    docs_url="/docs" if settings.DEBUG else None,
     contact={
         "name": "GrandGale Technologies",
         "url": "https://github.com/GrandGaleTechnologies",
@@ -93,11 +96,18 @@ app.add_middleware(
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     """
-    Middle wire for adding security headers
+    Middleware for adding security headers.
+    Skip for documentation routes to prevent CSP issues.
     """
     response = await call_next(request)
-    await secure_headers.set_headers_async(response)
+
+    # Skip CSP/Security headers for docs
+    if request.url.path not in ["/docs", "/redoc", "/openapi.json"]:
+        await secure_headers.set_headers_async(response)
+
     return response
+
+
 
 
 # Exception Handlers
@@ -119,14 +129,34 @@ if settings.LOGFIRE_TOKEN:
 
 # Healthcheck
 @app.get("/health", include_in_schema=False)
-async def health(_: Session = Depends(get_session)):
+async def health(_: AsyncSession = Depends(get_session)):
     """App Healthcheck"""
     return {"status": "Ok!"}
 
 
 # Routers
+# Include routers
 app.include_router(
-    sample_router,
-    tags=[tags.SAMPLE],
+    users_router,
+    tags=["Users & Authentication"],
+    dependencies=[Depends(RateLimiter(times=REQ_RATE, seconds=REQ_RATE_TIME))],
+)
+
+app.include_router(
+    events_router,
+    prefix="/events",
+    tags=["Events"],
+    dependencies=[Depends(RateLimiter(times=REQ_RATE, seconds=REQ_RATE_TIME))],
+)
+
+app.include_router(
+    tasks_router,
+    tags=["Tasks"],
+    dependencies=[Depends(RateLimiter(times=REQ_RATE, seconds=REQ_RATE_TIME))],
+)
+
+app.include_router(
+    attendees_router,
+    tags=["Attendees"],
     dependencies=[Depends(RateLimiter(times=REQ_RATE, seconds=REQ_RATE_TIME))],
 )

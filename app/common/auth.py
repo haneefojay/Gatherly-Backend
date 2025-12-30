@@ -19,11 +19,12 @@ class TokenGenerator:
         self.secret_key = secret_key
         self.expire_in = expire_in
 
-    async def generate(self, sub: str):
+    async def generate(self, sub: str, token_type: str = "access"):
         """This method generates a JWT token.
 
         Args:
             sub (str): The subject of the token, typically the user's ID.
+            token_type (str): Type of token - 'access' or 'refresh'
 
         Returns:
             str: The generated token.
@@ -40,7 +41,7 @@ class TokenGenerator:
         expire = iat + timedelta(minutes=self.expire_in)
 
         data = {
-            "type": "access",
+            "type": token_type,
             "sub": sub,
             "iat": iat.timestamp(),
             "exp": expire.timestamp(),
@@ -79,9 +80,10 @@ class TokenGenerator:
             if not sub:
                 raise Unauthorized("Token is missing the 'sub' field")
 
-            # Ensure the token is of type 'access'
-            if payload.get("type") != "access":
-                raise Unauthorized("Token type is invalid")
+            # Ensure the token is of the expected type (if specified)
+            expected_type = payload.get("type")
+            if not expected_type:
+                raise Unauthorized("Token type is missing")
 
             # Validate the 'sub' structure
             sub_parts = sub.split("-")

@@ -29,3 +29,30 @@ class PaginatedResponseSchema(ResponseSchema):
     """
 
     meta: PaginationSchema = Field(description="The pagination metadata")
+
+
+# Modern generic paginated response
+from typing import Generic, List, TypeVar
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response schema"""
+
+    items: List[T]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [],
+                "total": 100,
+                "page": 1,
+                "size": 10,
+                "pages": 10,
+            }
+        }
