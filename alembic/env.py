@@ -1,12 +1,17 @@
 import asyncio
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from alembic import context
+from app.attendees.models import Attendee  # noqa: F401
+from app.core.database import DBBase
 from app.core.settings import get_settings
+from app.events.models import Event, event_organizers  # noqa: F401
+from app.tasks.models import Task  # noqa: F401
+from app.users.models import RefreshToken, User  # noqa: F401
 
 settings = get_settings()
 
@@ -19,9 +24,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = DBBase.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

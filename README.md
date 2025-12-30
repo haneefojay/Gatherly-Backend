@@ -1,457 +1,336 @@
-# 🚀 Behemoth FastAPI
+# 🎯 Event Management API - Senior Backend Assessment
 
-A powerful, scalable template to kickstart your backend projects. Includes FastAPI with Docker integration, JWT authentication, optional Logfire instrumentation, and PEP-582-based dependency management via Astral's `uv`.
-
-Inspired by [Radoslav Georgiev's Django Structure for Scale lecture](https://youtu.be/yG3ZdxBb1oo?si=D6A9dHyhKb_Kf-J7) and my own experience, this template offers a structured approach to building scalable web applications.
-
-## 📑 Table of Contents
-
-* [✨ Features](#-features)
-* [📁 Project Structure](#-project-structure)
-* [💡 Getting Started](#-getting-started)
-* [🛠️ Using auto-module.py](#️-using-auto-modulepy)
-* [🔧 Environment Variables](#-environment-variables)
-* [🔐 JWT Auth & Security](#-jwt-auth--security)
-* [🎗 License](#-license)
-* [🚀 Deploy](#-deploy)
-* [🤝 Contribute to the Project](#-contribute-to-the-project)
-* [📬 Contact](#-contact)
+A production-ready Event Management API built with FastAPI, featuring JWT authentication, Role-Based Access Control (RBAC), advanced querying, and comprehensive event/task/attendee management.
 
 ## ✨ Features
 
-* **FastAPI** template with JWT authentication and Alembic migrations.
-* **Docker** & **docker-compose** configs for zero-friction container development.
-* **Astral `uv`** for dependency installation and script execution (no manual `venv` activation).
-* **Logfire auto-instrumentation**: set `LOGFIRE_TOKEN` in your environment and the app will automatically send logs to [Pydantic Logfire](https://logfire.pydantic.dev/docs/).
-* **Modular structure** inspired by scaling best practices.
-* **Optional `uvloop`** integration for improved asyncio performance (Linux/macOS only).
+### Authentication & Authorization
+- **JWT Authentication**: Access tokens (15 min) + Refresh tokens (7 days)
+- **RBAC System**: Three roles - User, Organizer, Admin
+- **Secure Password Hashing**: Argon2 algorithm
+- **Token Management**: Refresh token rotation and revocation
 
-## 📁 Project Structure
+### Event Management
+- **CRUD Operations**: Full event lifecycle management
+- **Status Workflow**: DRAFT → UPCOMING → ONGOING → COMPLETED → CANCELLED
+- **Multi-Organizer Support**: Events can have multiple organizers
+- **Capacity Management**: Track attendees and enforce limits
+- **Advanced Filtering**: By status, location, date range, organizer, capacity
+- **Full-Text Search**: Search events by title and description
+- **Pagination**: Efficient data retrieval with customizable page sizes
 
-```plaintext
-.vscode/
-alembic/
+### Task Management
+- **Event Tasks**: Create and assign tasks to events
+- **Assignment System**: Assign tasks to users
+- **Completion Tracking**: Mark tasks as complete/incomplete
+- **Business Rules**: Prevent modifications on completed/cancelled events
+
+### Attendee Management
+- **Registration System**: Users can register for events
+- **Capacity Enforcement**: Automatic waitlist when event is full
+- **Waitlist Management**: Automatic promotion when spots open
+- **Attendance Tracking**: View registered attendees and waitlist
+
+### Performance & Security
+- **Rate Limiting**: 3 requests/second (configurable per user/role)
+- **Redis Caching**: Ready for caching frequent queries
+- **Input Validation**: Comprehensive Pydantic validation
+- **Error Handling**: Detailed, consistent error responses
+- **Database Optimization**: Proper indexes and eager loading
+
+## 🏗️ Architecture
+
+### Project Structure
+```
 app/
-  author/
-    routes/
-      __init__.py
-      base.py
-    schemas/
-      __init__.py
-      base.py
-      create.py
-      edit.py
-      response.py
-    annotations.py
-    apis.py
-    crud.py
-    exceptions.py
-    formatters.py
-    models.py
-    selectors.py
-    services.py
-  common/
-    annotations.py
-    auth.py
-    cache.py
-    crud.py
-    dependencies.py
-    exceptions.py
-    paginators.py
-    schemas.py
-    security.py
-    types.py
-    utils.py
-  core/
-    database.py
-    handlers.py
-    settings.py
-    tags.py
-  external/
-    main.py
-tests/
-.env_sample
-.flake8
-.gitignore
-.pylintrc
-.python-version
-alembic.ini
-auto-module.py
-docker-compose.yml
-Dockerfile
-LICENSE
-pyproject.toml
-pytest.ini
-railway.toml
-README.md
-requirements.txt
-start.sh
-uv.lock
+├── users/              # User authentication & management
+│   ├── models.py       # User, RefreshToken models
+│   ├── schemas/        # Request/response schemas
+│   ├── services.py     # Business logic
+│   ├── routes/         # API endpoints
+│   └── apis.py         # Router aggregation
+├── events/             # Event management
+│   ├── models.py       # Event model with status workflow
+│   ├── schemas/        # Event schemas with validation
+│   ├── services.py     # Event CRUD and business rules
+│   ├── selectors.py    # Query builders with filtering
+│   └── routes/         # Event API endpoints
+├── tasks/              # Task management
+│   ├── models.py       # Task model
+│   ├── schemas/        # Task schemas
+│   ├── services.py     # Task business logic
+│   └── routes/         # Task API endpoints
+├── attendees/          # Attendee management
+│   ├── models.py       # Attendee model with waitlist
+│   ├── schemas/        # Attendee schemas
+│   ├── services.py     # Registration logic
+│   └── routes/         # Attendee API endpoints
+├── common/             # Shared utilities
+│   ├── auth.py         # JWT token generation/verification
+│   ├── permissions.py  # RBAC dependencies
+│   ├── cache.py        # Redis caching utilities
+│   ├── schemas.py      # Common response schemas
+│   └── exceptions.py   # Custom exceptions
+└── core/               # Core configuration
+    ├── database.py     # Database setup
+    ├── settings.py     # Environment configuration
+    └── handlers.py     # Exception handlers
 ```
 
-## 💡 Getting Started
+### Database Schema
+
+#### Users & Authentication
+- `users`: User accounts with roles (USER, ORGANIZER, ADMIN)
+- `refresh_tokens`: JWT refresh token management
+
+#### Events & Management
+- `events`: Events with status, capacity, organizers
+- `event_organizers`: Many-to-many relationship for multi-organizer support
+- `tasks`: Event tasks with assignment
+- `attendees`: Event registrations with waitlist support
+
+### Key Design Decisions
+
+1. **RBAC Implementation**: Permission-based access control using FastAPI dependencies
+2. **Status Workflow**: Enforced state transitions for event lifecycle
+3. **Waitlist System**: Automatic promotion when capacity becomes available
+4. **Token Strategy**: Short-lived access tokens with long-lived refresh tokens
+5. **Business Rules**: Strict validation preventing invalid operations
+
+## 🚀 Setup Instructions
 
 ### Prerequisites
+- Python 3.12+
+- PostgreSQL 14+
+- Redis 7+
+- [`uv`](https://docs.astral.sh/uv/) package manager
 
-* Docker & Docker Compose (optional)
-* [`uv`](https://docs.astral.sh/uv/) installed globally
-
-### 1. Clone the repository
+### 1. Clone and Install Dependencies
 
 ```bash
-git clone https://github.com/GrandGaleTechnologies/behemoth-fastapi
+git clone <repository-url>
 cd behemoth-fastapi
-```
-
-### 2. Install dependencies
-
-#### Using `uv` (recommended)
-
-```bash
-# Optional: add uvloop (doesnt work well on windows)
-uv add uvloop
 uv venv
+uv sync
 ```
 
-### 3. Environment variables
+### 2. Environment Configuration
 
-Create a `.env` file and add environment variables (use [Environment Variables](#-environment-variables) as a guide).
+Create a `.env` file:
 
-### 4. Initialize the database
+```env
+# Application
+DEBUG=True
+
+# Database
+POSTGRES_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/event_management
+
+# Redis
+REDIS_BROKER_URL=redis://localhost:6379/0
+
+# JWT Secret (generate with: openssl rand -hex 32)
+SECRET_KEY=your-secret-key-here
+
+# Optional: Logfire for observability
+LOGFIRE_TOKEN=your-logfire-token
+```
+
+### 3. Start Redis
 
 ```bash
-# With uv
+# Using Docker
+docker run -d --name event-redis -p 6379:6379 redis:latest
+
+# Or install locally
+# Windows: Download from https://redis.io/download
+# Mac: brew install redis && brew services start redis
+# Linux: sudo apt-get install redis-server && sudo systemctl start redis
+```
+
+### 4. Database Setup
+
+```bash
+# Run migrations
 uv run alembic upgrade head
 ```
 
-### 5. Start the application
-
-#### Development mode
+### 5. Run the Application
 
 ```bash
+# Development mode (with auto-reload)
 uv run fastapi dev
-```
 
-#### Production mode
-
-```bash
+# Production mode
 uv run fastapi run
 ```
 
-## 🛠️ Using auto-module.py
+The API will be available at `http://localhost:8000`
 
-This script automates creation of new FastAPI modules with a consistent folder layout:
+## 📚 API Documentation
 
+Once the server is running, visit:
+- **Swagger UI**: `http://localhost:8000` (in DEBUG mode)
+- **ReDoc**: `http://localhost:8000/redoc` (in DEBUG mode)
+
+### Quick Start Examples
+
+#### 1. Register a User
 ```bash
-app/
-└── ModuleName/
-    ├── routes/__init__.py
-    ├── routes/base.py
-    ├── schemas/base.py
-    ├── schemas/create.py
-    ├── schemas/edit.py
-    ├── schemas/response.py
-    ├── apis.py
-    ├── models.py
-    ├── services.py
-    ├── selectors.py
-    ├── exceptions.py
-    └── formatters.py
+curl -X POST http://localhost:8000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "full_name": "John Doe",
+    "password": "SecurePass123!"
+  }'
 ```
 
-### To create a new module:
-
+#### 2. Login
 ```bash
-uv run auto-module.py
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
 ```
 
-Follow the prompts to specify the module name.
+#### 3. Create an Event
+```bash
+curl -X POST http://localhost:8000/events \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Tech Conference 2024",
+    "description": "Annual technology conference",
+    "start_date": "2024-06-01T09:00:00",
+    "end_date": "2024-06-01T17:00:00",
+    "location": "Convention Center",
+    "capacity": 500
+  }'
+```
 
-## 🔧 Environment Variables
+#### 4. Register for Event
+```bash
+curl -X POST http://localhost:8000/events/{event_id}/register \
+  -H "Authorization: Bearer <access_token>"
+```
 
-See configuration and instructions in [docs/ENV.md](docs/ENV.md). Use [.env_sample](.env_sample) as your template.
+## 🔐 RBAC Permission Matrix
 
-## 🔐 JWT Auth & Security
+| Endpoint | User | Organizer | Admin |
+|----------|------|-----------|-------|
+| Create Event | ✅ | ✅ | ✅ |
+| Update Own Event | ✅ | ✅ | ✅ |
+| Update Any Event | ❌ | ❌ | ✅ |
+| Delete Own Event | ✅ | ✅ | ✅ |
+| Delete Any Event | ❌ | ❌ | ✅ |
+| Create Task | Owner/Organizer | ✅ | ✅ |
+| Update Task | Owner/Organizer/Assignee | ✅ | ✅ |
+| View Attendees | Owner/Organizer | ✅ | ✅ |
+| Update User Roles | ❌ | ❌ | ✅ |
 
-### JWT Authentication
+## 🧪 Testing
 
-* Implemented in `common/auth.py` and `common/security.py`
-* Leverages FastAPI's `Depends` and reusable `get_current_user()` function
-* Tokens include expiration and are signed using a secret key in `.env`
+```bash
+# Run all tests
+uv run pytest tests/ -v
 
-### Secure Endpoints
+# Run with coverage
+uv run pytest tests/ --cov=app --cov-report=html
 
-To protect a route:
+# Run specific test file
+uv run pytest tests/test_auth.py -v
+```
 
+## 📊 Rate Limiting
+
+Default configuration: **3 requests/second** per endpoint
+
+To modify, edit `app/main.py`:
 ```python
-from common.dependencies import get_current_user
-
-@app.get("/secure-data")
-def secure_data(user: User = Depends(get_current_user)):
-    return {"message": f"Hello, {user.username}!"}
-```
-
-### Auth Flow Overview
-
-1. User logs in via `/login` endpoint → receives JWT access token
-2. Frontend stores token (e.g., in localStorage or Authorization header)
-3. Token is sent with each protected request
-4. Backend validates token and grants access
-
-## Rate Limiting
-
-This project uses Redis-based rate limiting through `fastapi-limiter`. By default, it allows 3 requests per second per endpoint.
-
-### Redis Setup with Docker (Single Container)
-
-You can run Redis directly as a standalone container:
-
-```bash
-docker run -d \
-  --name behemoth-redis \
-  -p 6379:6379 \
-  -v redis_data:/data \
-  redis:latest
-```
-
-This will:
-
-* Run Redis in detached mode (`-d`)
-* Name the container `behemoth-redis`
-* Expose Redis on port `6379`
-* Persist data in a Docker-managed volume (`redis_data`)
-
-### Verify Redis is Running
-
-```bash
-docker exec -it behemoth-redis redis-cli ping
-```
-
-You should see `PONG` as the response.
-
----
-
-### Environment Configuration
-
-Update your `.env` file with the Redis container URL (since it’s exposed on localhost):
-
-```env
-REDIS_BROKER_URL=redis://localhost:6379/0
-```
-
----
-
-### Testing Rate Limits
-
-1. **Swagger UI**
-
-   * Navigate to `http://localhost:8000`
-   * Make multiple rapid requests to any endpoint
-   * After 3 requests within 1 second, you’ll receive a **429 Too Many Requests**
-
-2. **Curl**
-
-```bash
-for i in {1..4}; do curl http://localhost:8000/health; done
-```
-
----
-
-### Monitoring Redis
-
-```bash
-docker exec -it behemoth-redis redis-cli monitor
-```
-
----
-
-### Troubleshooting
-
-If Redis connection fails:
-
-1. Check container status:
-
-```bash
-docker ps -f name=behemoth-redis
-```
-
-2. View logs:
-
-```bash
-docker logs behemoth-redis
-```
-
-3. Restart Redis:
-
-```bash
-docker restart behemoth-redis
-```
-
-### Environment Configuration
-
-Update your `.env` file with the Redis container URL:
-```env
-REDIS_BROKER_URL=redis://redis:6379/0
-```
-
-### Rate Limiting Configuration
-
-Rate limiting is configured in `app/main.py`:
-```python
-REQ_RATE = 3        # Number of requests allowed
+REQ_RATE = 3        # Number of requests
 REQ_RATE_TIME = 1   # Time window in seconds
 ```
 
-This means each endpoint allows 3 requests per second. After exceeding this limit, requests will receive a 429 (Too Many Requests) response.
+For production, implement user-specific rate limiting based on roles:
+- Users: 100 requests/hour
+- Organizers: 200 requests/hour
+- Admins: 500 requests/hour
 
-### Testing Rate Limits
+## 🐳 Docker Deployment
 
-1. **Swagger UI**:
-   - Navigate to `http://localhost:8000`
-   - Make multiple rapid requests to any endpoint
-   - After 3 requests within 1 second, you'll receive a 429 response
-
-2. **Using Docker CLI**:
-```powershell
-# Make multiple requests quickly
-for ($i = 1; $i -le 4; $i++) {
-    docker-compose exec api curl http://localhost:8000/health
-}
-```
-
-### Monitoring Rate Limits
-
-Monitor Redis rate limiting in real-time:
-```powershell
-docker-compose exec redis redis-cli monitor
-```
-
-### Caching
-    ```python
-    from app.common.cache import CacheManager
-    from app.sample_module.schemas import SampleModel # Example Pydantic model
-
-    # Initialize for a specific model with a TTL of 300 seconds
-    sample_cache_manager = CacheManager(ttl=300, model_class=SampleModel)
-
-    # Or initialize without a model_class if you just need to store/retrieve raw data
-    generic_cache_manager = CacheManager(ttl=60)
-    ```
-
-2.  **Set Data in Cache**:
-    ```python
-    # For sample_cache_manager (with SampleModel)
-    await sample_cache_manager.set(
-      data={"id": 1}, 
-      value=SampleModel(id=1, name="Test"), 
-      cache_prefix="sample:"
-    )
-
-    # For generic_cache_manager (raw dict)
-    await generic_cache_manager.set(
-      data={"key": "my_data"}, 
-      value={"message": "Hello, cached world!"}, 
-      cache_prefix="generic:"
-    )
-    ```
-
-3.  **Get Data from Cache**:
-    ```python
-    # For sample_cache_manager (will return SampleModel instance or None)
-    cached_sample = await sample_cache_manager.get(data={"id": 1}, cache_prefix="sample:")
-    if cached_sample:
-        print(f"Cached Sample: {cached_sample.name}")
-
-    # For generic_cache_manager (will return dict or None)
-    cached_generic = await generic_cache_manager.get(
-      data={"key": "my_data"}, 
-      cache_prefix="generic:"
-    )
-    if cached_generic:
-        print(f"Cached Generic: {cached_generic['message']}")
-    
-    
-### Troubleshooting
-
-If Redis connection fails:
-1. Check Redis container status:
-```powershell
-docker-compose ps redis
-```
-
-2. View Redis logs:
-```powershell
-docker-compose logs redis
-```
-
-3. Verify Redis network connectivity:
-```powershell
-docker-compose exec api ping redis
-```
-
-4. Check Redis container health:
-```powershell
-docker inspect -f '{{.State.Health.Status}}' behemoth-fastapi-redis-1
-```
-
-5. Restart Redis
-
-## Pre-commit Setup
-
-This project uses pre-commit hooks to ensure code quality. The hooks include Ruff for linting and formatting, and Flake8 for additional code style checks.
-
-### Installation
-
-1. Install pre-commit:
 ```bash
-uv add --dev pre-commit
+# Build and run with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Stop services
+docker-compose down
 ```
 
-2. Install the pre-commit hooks:
-```bash
-pre-commit install
+## 🔧 Advanced Configuration
+
+### Caching Strategy
+Redis caching is configured but not fully implemented. To enable caching for event listings:
+
+```python
+from app.common.cache import CacheManager
+
+event_cache = CacheManager(ttl=300, model_class=Event)
+# Use in selectors for frequent queries
 ```
 
-### Usage
+### Database Indexes
+Key indexes for performance:
+- `users.email` (unique)
+- `users.role`
+- `events.status`
+- `events.start_date`
+- `events.location`
+- `event_organizers(event_id, user_id)`
+- `attendees(event_id, user_id)` (unique)
+- `attendees(event_id, status)`
 
-- The hooks will run automatically on `git commit`
-- To manually run the hooks on all files:
-```bash
-pre-commit run --all-files
-```
+## 📝 Business Rules
 
-- To run specific hooks:
-```bash
-pre-commit run ruff --all-files
-pre-commit run flake8 --all-files
-```
+### Event Status Transitions
+- DRAFT → UPCOMING, CANCELLED
+- UPCOMING → ONGOING, CANCELLED
+- ONGOING → COMPLETED, CANCELLED
+- COMPLETED → (no transitions)
+- CANCELLED → (no transitions)
 
-### Configuration
+### Task Management
+- Tasks cannot be created/modified on COMPLETED or CANCELLED events
+- Organizers and assignees can update tasks
+- Only organizers can delete tasks
 
-Pre-commit configuration is stored in `.pre-commit-config.yaml` and includes:
-- Ruff for linting and formatting
-- Flake8 for additional code style checks
+### Attendee Management
+- Registration only allowed for DRAFT and UPCOMING events
+- Automatic waitlist when capacity reached
+- Automatic promotion from waitlist when spots available
+- Cannot register twice for the same event
 
-## 🎗 License
+## 🎓 Key Learnings & Decisions
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🚀 Deploy
-
-Deploy this template on Railway:
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/CtmI_O?referralCode=e77QIa)
-
-## 🤝 Contribute to the Project
-
-Contributions are welcome! Fork the repo, create a branch, and submit a PR. Engage in discussions for ideas and improvements.
+1. **Argon2 for Password Hashing**: More secure than bcrypt, resistant to GPU attacks
+2. **Refresh Token Strategy**: Prevents frequent re-authentication while maintaining security
+3. **Eager Loading**: Used `selectinload` to prevent N+1 queries
+4. **Status Workflow**: Prevents invalid state transitions
+5. **Waitlist Automation**: Reduces manual intervention for event management
 
 ## 📬 Contact
 
-* **Name:** GrandGale Technologies
-* **Email:** [angobello0@gmail.com](mailto:angobello0@gmail.com)
-* **GitHub:** [https://github.com/GrandGaleTechnologies](https://github.com/GrandGaleTechnologies)
-* **LinkedIn:** [https://linkedin.com/in/angobello0](https://linkedin.com/in/angobello0)
-* **Upwork:** [https://www.upwork.com/freelancers/\~01bb1007bf8311388a](https://www.upwork.com/freelancers/~01bb1007bf8311388a)
-* **Instagram:** [https://www.instagram.com/bello\_ango0/](https://www.instagram.com/grandgale_technologies0/)
+- **Email**: afeez@grandgale.tech
+- **GitHub**: [GrandGaleTechnologies](https://github.com/GrandGaleTechnologies)
 
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+---
+
+**Built with ❤️ for the Senior Backend Engineer Assessment**
