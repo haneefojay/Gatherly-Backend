@@ -1,5 +1,7 @@
 """Attendee business logic and services"""
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,17 +33,16 @@ async def register_for_event(
             f"Cannot register for events with status '{event.status.value}'"
         )
 
-    # Check if already registered
+    # Check if a record already exists (any status)
     result = await session.execute(
         select(Attendee).where(
             Attendee.event_id == event.id,
             Attendee.user_id == user.id,
-            Attendee.status != AttendeeStatus.CANCELLED,
         )
     )
-    existing = result.scalar_one_or_none()
+    existing_attendee = result.scalar_one_or_none()
 
-    if existing:
+    if existing_attendee and existing_attendee.status != AttendeeStatus.CANCELLED:
         raise BadRequest("Already registered for this event")
 
     # Determine status based on capacity
@@ -66,14 +67,20 @@ async def register_for_event(
         waitlist_position = (result.scalar() or 0) + 1
         message = f"Event is full. Added to waitlist at position {waitlist_position}"
 
-    # Create attendee record
-    attendee = Attendee(
-        event_id=event.id,
-        user_id=user.id,
-        status=status,
-    )
-
-    session.add(attendee)
+    if existing_attendee:
+        # Reactivate existing cancelled record
+        existing_attendee.status = status
+        existing_attendee.registered_at = datetime.utcnow() # Update timestamp
+        attendee = existing_attendee
+    else:
+        # Create new attendee record
+        attendee = Attendee(
+            event_id=event.id,
+            user_id=user.id,
+            status=status,
+        )
+        session.add(attendee)
+    
     await session.commit()
     await session.refresh(attendee)
     await session.refresh(event)
