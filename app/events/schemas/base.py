@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.events.models import EventStatus
 
@@ -33,18 +33,30 @@ class EventCreate(EventBase):
 
     status: EventStatus = EventStatus.DRAFT
 
-    class Config:
-        json_schema_extra = {
+    @field_validator("start_date")
+    @classmethod
+    def validate_start_date(cls, v: datetime):
+        """Validate that start_date is not in the past"""
+        # Compare with current time (naive or aware)
+        now = datetime.now(v.tzinfo)
+        if v < now:
+            raise ValueError("start_date cannot be in the past")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {
-                "title": "Tech Conference 2024",
+                "title": "Tech Conference 2026",
                 "description": "Annual technology conference",
-                "start_date": "2024-06-01T09:00:00",
-                "end_date": "2024-06-01T17:00:00",
+                "start_date": "2026-06-01T09:00:00",
+                "end_date": "2026-06-01T17:00:00",
                 "location": "Convention Center",
                 "capacity": 500,
                 "status": "draft",
             }
-        }
+        },
+    )
 
 
 class EventUpdate(BaseModel):
@@ -58,13 +70,27 @@ class EventUpdate(BaseModel):
     capacity: int | None = Field(None, gt=0)
     status: EventStatus | None = None
 
-    class Config:
-        json_schema_extra = {
+    @field_validator("start_date")
+    @classmethod
+    def validate_start_date(cls, v: datetime | None):
+        """Validate that start_date is not in the past"""
+        if v is None:
+            return v
+        # Compare with current time (naive or aware)
+        now = datetime.now(v.tzinfo)
+        if v < now:
+            raise ValueError("start_date cannot be in the past")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {
-                "title": "Updated Tech Conference 2024",
+                "title": "Updated Tech Conference 2026",
                 "status": "upcoming",
             }
-        }
+        },
+    )
 
 
 class EventResponse(EventBase):
@@ -80,27 +106,28 @@ class EventResponse(EventBase):
     available_spots: int
     organizer_ids: List[UUID] = []
 
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
-                "title": "Tech Conference 2024",
+                "title": "Tech Conference 2026",
                 "description": "Annual technology conference",
-                "start_date": "2024-06-01T09:00:00",
-                "end_date": "2024-06-01T17:00:00",
+                "start_date": "2026-06-01T09:00:00",
+                "end_date": "2026-06-01T17:00:00",
                 "location": "Convention Center",
                 "capacity": 500,
                 "status": "upcoming",
                 "current_attendees": 150,
                 "created_by_id": "123e4567-e89b-12d3-a456-426614174001",
-                "created_at": "2024-01-01T00:00:00",
-                "updated_at": "2024-01-01T00:00:00",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
                 "is_full": False,
                 "available_spots": 350,
                 "organizer_ids": [],
             }
-        }
+        },
+    )
 
 
 class EventFilterParams(BaseModel):
@@ -113,16 +140,17 @@ class EventFilterParams(BaseModel):
     organizer_id: UUID | None = None
     has_capacity: bool | None = None  # Filter events with available spots
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "upcoming",
                 "location": "Convention Center",
-                "start_date_from": "2024-01-01T00:00:00",
-                "start_date_to": "2024-12-31T23:59:59",
+                "start_date_from": "2026-01-01T00:00:00",
+                "start_date_to": "2026-12-31T23:59:59",
                 "has_capacity": True,
             }
         }
+    )
 
 
 class AddOrganizerRequest(BaseModel):
@@ -130,7 +158,9 @@ class AddOrganizerRequest(BaseModel):
 
     user_id: UUID
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {"user_id": "123e4567-e89b-12d3-a456-426614174002"}
-        }
+        },
+    )

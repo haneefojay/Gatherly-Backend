@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REQ_RATE: int = 30
+    REQ_RATE_TIME: int = 60
 
 
 @lru_cache
