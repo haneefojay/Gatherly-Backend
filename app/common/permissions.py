@@ -49,7 +49,7 @@ async def get_current_user(
     token = parts[1]
 
     # Verify token and extract user ID
-    user_id_str = await access_token_verifier.verify(token, "user")
+    user_id_str = await access_token_verifier.verify(token, "access")
 
     if not user_id_str:
         raise Unauthorized("Invalid access token")
