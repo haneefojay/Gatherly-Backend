@@ -1,0 +1,164 @@
+"""Event selectors for querying and filtering"""
+
+import uuid
+from typing import List
+
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.common.exceptions import BadRequest
+from app.common.types import PaginationParamsType
+from app.events.models import Event, EventStatus, event_organizers
+from app.events.schemas import EventFilterParams
+
+
+async def get_event_by_id(session: AsyncSession, event_id: uuid.UUID) -> Event | None:
+    """Get event by ID with eager loading
+
+    Args:
+        session: Database session
+        event_id: Event ID
+
+    Returns:
+        Event instance or None
+    """
+    result = await session.execute(
+        select(Event)
+        .where(Event.id == event_id)
+        .options(selectinload(Event.organizers), selectinload(Event.created_by))
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_events(
+    session: AsyncSession,
+    filters: EventFilterParams | None = None,
+    pagination: PaginationParamsType | None = None,
+    search_query: str | None = None,
+) -> tuple[List[Event], int]:
+    """Get events with filtering, search, and pagination
+
+    Args:
+        session: Database session
+        filters: Filter parameters
+        pagination: Pagination parameters
+        search_query: Full-text search query
+
+    Returns:
+        Tuple of (events list, total count)
+    """
+    # Base query
+    query = select(Event).options(
+        selectinload(Event.organizers), selectinload(Event.created_by)
+    )
+
+    # Apply filters
+    conditions = []
+
+    if filters:
+        if filters.status:
+            conditions.append(Event.status == filters.status)
+
+        if filters.location:
+            conditions.append(Event.location.ilike(f"%{filters.location}%"))
+
+        if filters.start_date_from:
+            conditions.append(Event.start_date >= filters.start_date_from)
+
+        if filters.start_date_to:
+            conditions.append(Event.start_date <= filters.start_date_to)
+
+        if filters.has_capacity is not None:
+            if filters.has_capacity:
+                conditions.append(Event.current_attendees < Event.capacity)
+            else:
+                conditions.append(Event.current_attendees >= Event.capacity)
+
+        if filters.organizer_id:
+            # Join with event_organizers to filter by organizer
+            query = query.join(
+                event_organizers, Event.id == event_organizers.c.event_id
+            ).where(event_organizers.c.user_id == filters.organizer_id)
+
+    # Apply search query (simple ILIKE search on title and description)
+    if search_query:
+        search_conditions = [
+            Event.title.ilike(f"%{search_query}%"),
+            Event.description.ilike(f"%{search_query}%"),
+        ]
+        conditions.append(or_(*search_conditions))
+
+    if conditions:
+        query = query.where(and_(*conditions))
+
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await session.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply sorting
+    if pagination and pagination.order_by == "asc":
+        query = query.order_by(Event.start_date.asc())
+    else:
+        query = query.order_by(Event.start_date.desc())
+
+    # Apply pagination
+    if pagination:
+        offset = (pagination.page - 1) * pagination.size
+        query = query.offset(offset).limit(pagination.size)
+
+    # Execute query
+    result = await session.execute(query)
+    events = list(result.scalars().all())
+
+    return events, total
+
+
+async def get_user_events(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    pagination: PaginationParamsType | None = None,
+) -> tuple[List[Event], int]:
+    """Get events created by or organized by a user
+
+    Args:
+        session: Database session
+        user_id: User ID
+        pagination: Pagination parameters
+
+    Returns:
+        Tuple of (events list, total count)
+    """
+    # Query for events created by user or where user is organizer
+    query = (
+        select(Event)
+        .outerjoin(event_organizers, Event.id == event_organizers.c.event_id)
+        .where(
+            or_(
+                Event.created_by_id == user_id,
+                event_organizers.c.user_id == user_id,
+            )
+        )
+        .options(selectinload(Event.organizers), selectinload(Event.created_by))
+        .distinct()
+    )
+
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await session.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply sorting
+    query = query.order_by(Event.start_date.desc())
+
+    # Apply pagination
+    if pagination:
+        offset = (pagination.page - 1) * pagination.size
+        query = query.offset(offset).limit(pagination.size)
+
+    # Execute query
+    result = await session.execute(query)
+    events = list(result.scalars().all())
+
+    return events, total

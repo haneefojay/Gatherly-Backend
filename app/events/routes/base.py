@@ -1,0 +1,250 @@
+"""Event API routes"""
+
+import uuid
+from typing import List
+
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.dependencies import get_session, pagination_params
+from app.common.exceptions import BadRequest
+from app.common.permissions import CurrentUser, OrganizerOrAdminUser
+from app.common.schemas import PaginatedResponse
+from app.common.types import PaginationParamsType
+from app.events.models import EventStatus
+from app.events.schemas import (
+    AddOrganizerRequest,
+    EventCreate,
+    EventFilterParams,
+    EventResponse,
+    EventUpdate,
+)
+from app.events.selectors import get_event_by_id, get_events, get_user_events
+from app.events.services import (
+    add_organizer,
+    create_event,
+    delete_event,
+    remove_organizer,
+    update_event,
+)
+
+router = APIRouter()
+
+
+@router.post(
+    "",
+    response_model=EventResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new event",
+    description="Create a new event. Creator is automatically added as first organizer.",
+)
+async def create_event_endpoint(
+    event_data: EventCreate,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a new event"""
+    event = await create_event(session, event_data, current_user)
+
+    # Build response with organizer IDs
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+
+    return response
+
+
+@router.get(
+    "",
+    response_model=PaginatedResponse[EventResponse],
+    summary="List and search events",
+    description="Get a paginated list of events with optional filtering and search",
+)
+async def list_events(
+    session: AsyncSession = Depends(get_session),
+    pagination: PaginationParamsType = Depends(pagination_params),
+    status_filter: EventStatus | None = Query(None, alias="status"),
+    location: str | None = Query(None),
+    start_date_from: str | None = Query(None),
+    start_date_to: str | None = Query(None),
+    organizer_id: uuid.UUID | None = Query(None),
+    has_capacity: bool | None = Query(None),
+    search: str | None = Query(None, description="Search in title and description"),
+):
+    """List events with filtering and search"""
+    # Build filters
+    filters = EventFilterParams(
+        status=status_filter,
+        location=location,
+        start_date_from=start_date_from,
+        start_date_to=start_date_to,
+        organizer_id=organizer_id,
+        has_capacity=has_capacity,
+    )
+
+    events, total = await get_events(session, filters, pagination, search)
+
+    # Build responses with organizer IDs
+    items = []
+    for event in events:
+        response = EventResponse.model_validate(event)
+        response.organizer_ids = [org.id for org in event.organizers]
+        items.append(response)
+
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        size=pagination.size,
+        pages=(total + pagination.size - 1) // pagination.size,
+    )
+
+
+@router.get(
+    "/my-events",
+    response_model=PaginatedResponse[EventResponse],
+    summary="Get current user's events",
+    description="Get events created by or organized by the current user",
+)
+async def get_my_events(
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+    pagination: PaginationParamsType = Depends(pagination_params),
+):
+    """Get current user's events"""
+    events, total = await get_user_events(session, current_user.id, pagination)
+
+    # Build responses
+    items = []
+    for event in events:
+        response = EventResponse.model_validate(event)
+        response.organizer_ids = [org.id for org in event.organizers]
+        items.append(response)
+
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=pagination.page,
+        size=pagination.size,
+        pages=(total + pagination.size - 1) // pagination.size,
+    )
+
+
+@router.get(
+    "/{event_id}",
+    response_model=EventResponse,
+    summary="Get event details",
+    description="Get detailed information about a specific event",
+)
+async def get_event(
+    event_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get event by ID"""
+    event = await get_event_by_id(session, event_id)
+
+    if not event:
+        raise BadRequest("Event not found")
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+
+    return response
+
+
+@router.put(
+    "/{event_id}",
+    response_model=EventResponse,
+    summary="Update event",
+    description="Update event details. Requires organizer or admin permissions.",
+)
+async def update_event_endpoint(
+    event_id: uuid.UUID,
+    event_data: EventUpdate,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Update an event"""
+    event = await get_event_by_id(session, event_id)
+
+    if not event:
+        raise BadRequest("Event not found")
+
+    event = await update_event(session, event, event_data, current_user)
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+
+    return response
+
+
+@router.delete(
+    "/{event_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete event",
+    description="Delete an event. Only creator or admin can delete.",
+)
+async def delete_event_endpoint(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete an event"""
+    event = await get_event_by_id(session, event_id)
+
+    if not event:
+        raise BadRequest("Event not found")
+
+    await delete_event(session, event, current_user)
+    return None
+
+
+@router.post(
+    "/{event_id}/organizers",
+    response_model=EventResponse,
+    summary="Add organizer to event",
+    description="Add a user as an organizer to the event",
+)
+async def add_organizer_endpoint(
+    event_id: uuid.UUID,
+    organizer_data: AddOrganizerRequest,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Add organizer to event"""
+    event = await get_event_by_id(session, event_id)
+
+    if not event:
+        raise BadRequest("Event not found")
+
+    event = await add_organizer(session, event, organizer_data, current_user)
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+
+    return response
+
+
+@router.delete(
+    "/{event_id}/organizers/{organizer_id}",
+    response_model=EventResponse,
+    summary="Remove organizer from event",
+    description="Remove a user from event organizers",
+)
+async def remove_organizer_endpoint(
+    event_id: uuid.UUID,
+    organizer_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove organizer from event"""
+    event = await get_event_by_id(session, event_id)
+
+    if not event:
+        raise BadRequest("Event not found")
+
+    event = await remove_organizer(session, event, organizer_id, current_user)
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+
+    return response
