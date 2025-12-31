@@ -1,20 +1,24 @@
 """RBAC Permission system and dependencies"""
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Type, TypeVar
 
-from fastapi import Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.auth import TokenGenerator
 from app.common.dependencies import get_session
 from app.common.exceptions import Forbidden, Unauthorized
+from app.core.database import DBBase
 from app.core.settings import get_settings
 from app.users.models import User, UserRole
 
 settings = get_settings()
+
+ModelT = TypeVar("ModelT", bound=DBBase)
+
 
 # Define security scheme
 security = HTTPBearer()
@@ -24,6 +28,60 @@ access_token_verifier = TokenGenerator(
     secret_key=settings.SECRET_KEY,
     expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,  # Not used for verification, but required by TokenGenerator
 )
+
+
+def require_resource_ownership(
+    model: Type[ModelT],
+    id_param: str = "id",
+    owner_field: str = "created_by_id",
+):
+    """Dependency factory to require resource ownership or admin role.
+
+    Fetches the resource by ID (from path params) and ensures the current user
+    is either the owner (based on owner_field) or an Admin.
+
+    Args:
+        model: SQLAlchemy model class
+        id_param: Name of the path parameter containing the resource ID
+        owner_field: Name of the model field containing the owner's ID
+
+    Returns:
+        The requested resource instance
+    """
+
+    async def dependency(
+        request: Request,
+        session: AsyncSession = Depends(get_session),
+        user: User = Depends(get_current_user),
+    ) -> ModelT:
+        resource_id = request.path_params.get(id_param)
+        if not resource_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Path parameter '{id_param}' not found",
+            )
+
+        try:
+            # Handle UUID conversion if necessary
+            resource_uuid = uuid.UUID(str(resource_id))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format"
+            )
+
+        resource = await session.get(model, resource_uuid)
+        if not resource:
+            raise HTTPException(status_code=404, detail=f"{model.__name__} not found")
+
+        # Check permission: Admin or Owner
+        if user.role != UserRole.ADMIN:
+            owner_id = getattr(resource, owner_field, None)
+            if owner_id != user.id:
+                raise Forbidden("Only the creator or an admin can perform this action")
+
+        return resource
+
+    return dependency
 
 
 async def get_current_user(

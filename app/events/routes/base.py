@@ -8,10 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session, pagination_params
 from app.common.exceptions import BadRequest
-from app.common.permissions import CurrentUser, OrganizerOrAdminUser
+from app.common.permissions import (
+    CurrentUser,
+    OrganizerOrAdminUser,
+    require_resource_ownership,
+)
 from app.common.schemas import PaginatedResponse
 from app.common.types import PaginationParamsType
-from app.events.models import EventStatus
+from app.events.models import Event, EventStatus
 from app.events.schemas import (
     AddOrganizerRequest,
     EventCreate,
@@ -184,16 +188,11 @@ async def update_event_endpoint(
     description="Delete an event. Only creator or admin can delete.",
 )
 async def delete_event_endpoint(
-    event_id: uuid.UUID,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
+    event: Event = Depends(require_resource_ownership(Event, "event_id")),
 ):
     """Delete an event"""
-    event = await get_event_by_id(session, event_id)
-
-    if not event:
-        raise BadRequest("Event not found")
-
     await delete_event(session, event, current_user)
     return None
 
@@ -228,20 +227,15 @@ async def add_organizer_endpoint(
     "/{event_id}/organizers/{organizer_id}",
     response_model=EventResponse,
     summary="Remove organizer from event",
-    description="Remove a user from event organizers",
+    description="Remove a user from event organizers. Only creator or admin can remove.",
 )
 async def remove_organizer_endpoint(
-    event_id: uuid.UUID,
     organizer_id: uuid.UUID,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
+    event: Event = Depends(require_resource_ownership(Event, "event_id")),
 ):
     """Remove organizer from event"""
-    event = await get_event_by_id(session, event_id)
-
-    if not event:
-        raise BadRequest("Event not found")
-
     event = await remove_organizer(session, event, organizer_id, current_user)
 
     response = EventResponse.model_validate(event)

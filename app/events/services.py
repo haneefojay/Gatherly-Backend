@@ -18,8 +18,8 @@ STATUS_TRANSITIONS = {
     EventStatus.DRAFT: [EventStatus.UPCOMING, EventStatus.CANCELLED],
     EventStatus.UPCOMING: [EventStatus.ONGOING, EventStatus.CANCELLED],
     EventStatus.ONGOING: [EventStatus.COMPLETED, EventStatus.CANCELLED],
-    EventStatus.COMPLETED: [],  # No transitions from completed
-    EventStatus.CANCELLED: [],  # No transitions from cancelled
+    EventStatus.COMPLETED: [],
+    EventStatus.CANCELLED: [],
 }
 
 
