@@ -7,11 +7,15 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.exceptions import BadRequest, Forbidden
+from app.common.exceptions import (
+    EventStatusException,
+    ForbiddenException,
+    NotFoundException,
+    ValidationException,
+)
 from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import AddOrganizerRequest, EventCreate, EventUpdate
 from app.users.models import User, UserRole
-
 
 # Valid status transitions
 STATUS_TRANSITIONS = {
@@ -80,8 +84,9 @@ async def update_event(
         Updated event instance
 
     Raises:
-        Forbidden: If user doesn't have permission
-        BadRequest: If update violates business rules
+        ForbiddenException: If user doesn't have permission
+        EventStatusException: If status transition invalid
+        ValidationException: If update violates business rules
     """
     # Check permissions
     await check_event_permission(session, event, current_user)
@@ -92,7 +97,9 @@ async def update_event(
 
     # Check if event can be modified
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
-        raise BadRequest(f"Cannot modify event with status '{event.status.value}'")
+        raise EventStatusException(
+            f"Cannot modify event with status '{event.status.value}'"
+        )
 
     # Update fields
     if event_data.title is not None:
@@ -108,7 +115,7 @@ async def update_event(
     if event_data.capacity is not None:
         # Validate capacity isn't reduced below current attendees
         if event_data.capacity < event.current_attendees:
-            raise BadRequest(
+            raise ValidationException(
                 f"Cannot reduce capacity below current attendees ({event.current_attendees})"
             )
         event.capacity = event_data.capacity
@@ -132,12 +139,8 @@ async def delete_event(session: AsyncSession, event: Event, current_user: User) 
         current_user: User performing the deletion
 
     Raises:
-        Forbidden: If user doesn't have permission
+        ForbiddenException: If user doesn't have permission
     """
-    # Only creator or admin can delete
-    if event.created_by_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise Forbidden("Only event creator or admin can delete events")
-
     await session.delete(event)
     await session.commit()
 
@@ -160,8 +163,9 @@ async def add_organizer(
         Updated event instance
 
     Raises:
-        Forbidden: If user doesn't have permission
-        BadRequest: If user is already an organizer
+        ForbiddenException: If user doesn't have permission
+        NotFoundException: Is user not found
+        ValidationException: If user is already an organizer
     """
     # Check permissions
     await check_event_permission(session, event, current_user)
@@ -173,7 +177,7 @@ async def add_organizer(
     new_organizer = result.scalar_one_or_none()
 
     if not new_organizer:
-        raise BadRequest("User not found")
+        raise NotFoundException("User not found")
 
     # Check if already an organizer
     result = await session.execute(
@@ -183,7 +187,7 @@ async def add_organizer(
         )
     )
     if result.first():
-        raise BadRequest("User is already an organizer")
+        raise ValidationException("User is already an organizer")
 
     # Add organizer
     await session.execute(
@@ -216,13 +220,9 @@ async def remove_organizer(
         Updated event instance
 
     Raises:
-        Forbidden: If user doesn't have permission
-        BadRequest: If trying to remove last organizer
+        ForbiddenException: If user doesn't have permission
+        ValidationException: If trying to remove last organizer
     """
-    # Only creator or admin can remove organizers
-    if event.created_by_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise Forbidden("Only event creator or admin can remove organizers")
-
     # Count current organizers
     result = await session.execute(
         select(event_organizers).where(event_organizers.c.event_id == event.id)
@@ -230,7 +230,7 @@ async def remove_organizer(
     organizer_count = len(result.all())
 
     if organizer_count <= 1:
-        raise BadRequest("Cannot remove the last organizer")
+        raise ValidationException("Cannot remove the last organizer")
 
     # Remove organizer
     await session.execute(
@@ -257,7 +257,7 @@ async def check_event_permission(
         user: User to check permission for
 
     Raises:
-        Forbidden: If user doesn't have permission
+        ForbiddenException: If user doesn't have permission
     """
     # Admin can do anything
     if user.role == UserRole.ADMIN:
@@ -277,7 +277,7 @@ async def check_event_permission(
     if result.first():
         return
 
-    raise Forbidden("You don't have permission to modify this event")
+    raise ForbiddenException("You don't have permission to modify this event")
 
 
 def validate_status_transition(
@@ -290,11 +290,11 @@ def validate_status_transition(
         new_status: New event status
 
     Raises:
-        BadRequest: If transition is invalid
+        EventStatusException: If transition is invalid
     """
     allowed_transitions = STATUS_TRANSITIONS.get(current_status, [])
 
     if new_status not in allowed_transitions:
-        raise BadRequest(
+        raise EventStatusException(
             f"Invalid status transition from '{current_status.value}' to '{new_status.value}'"
         )

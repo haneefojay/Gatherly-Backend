@@ -6,7 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.attendees.models import Attendee, AttendeeStatus
-from app.common.exceptions import BadRequest
+from app.common.exceptions import (
+    EventStatusException,
+    NotFoundException,
+    ValidationException,
+)
 from app.events.models import Event, EventStatus
 from app.users.models import User
 
@@ -25,11 +29,12 @@ async def register_for_event(
         Tuple of (attendee, message, waitlist_position)
 
     Raises:
-        BadRequest: If registration is not allowed
+        EventStatusException: If event status invalid
+        ValidationException: If already registered
     """
     # Check if event allows registration
     if event.status not in [EventStatus.DRAFT, EventStatus.UPCOMING]:
-        raise BadRequest(
+        raise EventStatusException(
             f"Cannot register for events with status '{event.status.value}'"
         )
 
@@ -43,7 +48,7 @@ async def register_for_event(
     existing_attendee = result.scalar_one_or_none()
 
     if existing_attendee and existing_attendee.status != AttendeeStatus.CANCELLED:
-        raise BadRequest("Already registered for this event")
+        raise ValidationException("Already registered for this event")
 
     # Determine status based on capacity
     if event.current_attendees < event.capacity:
@@ -70,7 +75,7 @@ async def register_for_event(
     if existing_attendee:
         # Reactivate existing cancelled record
         existing_attendee.status = status
-        existing_attendee.registered_at = datetime.utcnow() # Update timestamp
+        existing_attendee.registered_at = datetime.utcnow()  # Update timestamp
         attendee = existing_attendee
     else:
         # Create new attendee record
@@ -80,7 +85,7 @@ async def register_for_event(
             status=status,
         )
         session.add(attendee)
-    
+
     await session.commit()
     await session.refresh(attendee)
     await session.refresh(event)
@@ -99,7 +104,7 @@ async def unregister_from_event(
         user: User unregistering
 
     Raises:
-        BadRequest: If not registered
+        NotFoundException: If not registered
     """
     # Get attendee record
     result = await session.execute(
@@ -112,7 +117,7 @@ async def unregister_from_event(
     attendee = result.scalar_one_or_none()
 
     if not attendee:
-        raise BadRequest("Not registered for this event")
+        raise NotFoundException("Not registered for this event")
 
     was_registered = attendee.status == AttendeeStatus.REGISTERED
 

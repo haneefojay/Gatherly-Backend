@@ -56,3 +56,15 @@ class PaginatedResponse(BaseModel, Generic[T]):
                 "pages": 10,
             }
         }
+
+
+from datetime import datetime
+
+
+class ErrorResponse(BaseModel):
+    """Standard error response schema"""
+
+    error: str
+    message: str
+    details: dict | None = None
+    timestamp: datetime

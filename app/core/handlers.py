@@ -1,130 +1,98 @@
+from datetime import datetime
+
 from fastapi import Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
+from sqlalchemy.exc import IntegrityError
 
-from app.common.exceptions import (
-    BadGatewayError,
-    CustomHTTPException,
-    InternalServerError,
-)
+from app.common.exceptions import BehemothException
+from app.common.schemas import ErrorResponse
 from app.core.settings import get_settings
 
+# Globals
 settings = get_settings()
 
-from sqlalchemy.exc import IntegrityError
+
+async def behemoth_exception_handler(_: Request, exc: BehemothException):
+    """
+    Handler for all application specific exceptions
+    """
+    return ORJSONResponse(
+        status_code=exc.status_code,
+        content=jsonable_encoder(
+            ErrorResponse(
+                error=exc.error_code,
+                message=exc.message,
+                details=exc.details,
+                timestamp=exc.timestamp,
+            ).model_dump()
+        ),
+    )
 
 
 async def integrity_error_exception_handler(_: Request, exc: IntegrityError):
     """
-    Exception handler for database integrity errors (unique constraints, foreign keys)
+    Handler for database integrity errors
     """
     error_info = str(exc.orig) if exc.orig else str(exc)
 
     if "uq_event_title_date_loc" in error_info:
         msg = "An event with this title, start date, and location already exists."
+        code = "EventConflict"
     elif "unique constraint" in error_info.lower() or "duplicate key" in error_info.lower():
         msg = "A record with these unique details already exists."
+        code = "DuplicateRecord"
     else:
         msg = "Database integrity error."
+        code = "IntegrityError"
 
     return ORJSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": msg, "loc": []},
-                "data": None,
-            }
-        ),
-    )
-
-
-async def base_exception_handler(_: Request, exc: Exception):
-    """
-    Exception handler for general Exception
-    """
-    # OPTIONAL: send email to staff
-    print(exc)
-    return ORJSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": "Internal Server Error", "loc": []},
-                "data": None,
-            }
+            ErrorResponse(
+                error=code,
+                message=msg,
+                details={"original_error": str(exc)},
+                timestamp=datetime.utcnow(),
+            ).model_dump()
         ),
     )
 
 
 async def request_validation_exception_handler(_: Request, exc: RequestValidationError):
     """
-    Exception handler for 'RequestValidationError' raised by pydantic
+    Handler for Pydantic validation errors
     """
-
-    # Get error message
-    error = exc.errors()[0]
-
     return ORJSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": error["msg"], "loc": error["loc"]},
-                "data": None,
-            }
+            ErrorResponse(
+                error="ValidationError",
+                message="Input validation failed",
+                details={"errors": exc.errors()},
+                timestamp=datetime.utcnow(),
+            ).model_dump()
         ),
     )
 
 
-async def internal_server_error_exception_handler(_: Request, exc: InternalServerError):
+async def base_exception_handler(_: Request, exc: Exception):
     """
-    Exception handler for 'InternalServerError' exception
+    Fallback handler for unhandled exceptions
     """
-    # OPTIONAL: send email to staff
-    print(exc)
+    print(f"Unhandled Exception: {exc}")
+    import traceback
+    traceback.print_exc()
+
     return ORJSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": "Internal Server Error", "loc": []},
-                "data": None,
-            }
-        ),
-    )
-
-
-async def bad_gateway_error_exception_handler(_: Request, exc: BadGatewayError):
-    """
-    Exception handler for 'BadGatewayError' exception
-    """
-    # OPTIONAL: send email to staff
-    print(exc)
-    return ORJSONResponse(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": "Bad Gateway Please Contact Support", "loc": exc.loc},
-                "data": None,
-            }
-        ),
-    )
-
-
-async def custom_http_exception_handler(_: Request, exc: CustomHTTPException):
-    """
-    Exception handler for 'NotFound' exception
-    """
-    return ORJSONResponse(
-        status_code=exc.status_code,
-        content=jsonable_encoder(
-            {
-                "status": "error",
-                "error": {"msg": exc.msg, "loc": exc.loc},
-                "data": None,
-            }
+            ErrorResponse(
+                error="InternalServerError",
+                message="An unexpected error occurred",
+                details=None,
+                timestamp=datetime.utcnow(),
+            ).model_dump()
         ),
     )

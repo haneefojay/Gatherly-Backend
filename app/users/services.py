@@ -11,7 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.auth import TokenGenerator
-from app.common.exceptions import BadRequest, Unauthorized
+from app.common.exceptions import (
+    NotFoundException,
+    UnauthorizedException,
+    ValidationException,
+)
 from app.core.settings import get_settings
 from app.users.models import RefreshToken, User, UserRole
 from app.users.schemas import UserCreate
@@ -42,14 +46,14 @@ async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
         Created user instance
 
     Raises:
-        BadRequest: If email already exists
+        ValidationException: If email already exists
     """
     # Check if email already exists
     result = await session.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
-        raise BadRequest("Email already registered")
+        raise ValidationException("Email already registered")
 
     # Hash password
     hashed_password = ph.hash(user_data.password)
@@ -149,13 +153,13 @@ async def verify_refresh_token(session: AsyncSession, token: str) -> User:
         User instance
 
     Raises:
-        Unauthorized: If token is invalid or expired
+        UnauthorizedException: If token is invalid or expired
     """
     # Verify token signature and extract user ID
     user_id_str = await refresh_token_generator.verify(token, "user")
 
     if not user_id_str:
-        raise Unauthorized("Invalid refresh token")
+        raise UnauthorizedException("Invalid refresh token")
 
     user_id = uuid.UUID(user_id_str)
 
@@ -174,14 +178,14 @@ async def verify_refresh_token(session: AsyncSession, token: str) -> User:
     refresh_token = result.scalar_one_or_none()
 
     if not refresh_token:
-        raise Unauthorized("Invalid or expired refresh token")
+        raise UnauthorizedException("Invalid or expired refresh token")
 
     # Get user
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
-        raise Unauthorized("User not found or inactive")
+        raise UnauthorizedException("User not found or inactive")
 
     return user
 
@@ -194,7 +198,7 @@ async def revoke_refresh_token(session: AsyncSession, token: str) -> None:
         token: Refresh token string
 
     Raises:
-        Unauthorized: If token is invalid
+        UnauthorizedException: If token is invalid
     """
     # Hash token
     token_hash = hashlib.sha256(token.encode()).hexdigest()
@@ -224,13 +228,13 @@ async def update_user_role(
         Updated user instance
 
     Raises:
-        BadRequest: If user not found
+        NotFoundException: If user not found
     """
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
-        raise BadRequest("User not found")
+        raise NotFoundException("User not found")
 
     user.role = new_role
     await session.commit()

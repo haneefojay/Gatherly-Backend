@@ -14,17 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
-from app.common.exceptions import (
-    BadGatewayError,
-    CustomHTTPException,
-    InternalServerError,
-)
+from app.common.exceptions import BehemothException
 from app.core.handlers import (
-    bad_gateway_error_exception_handler,
     base_exception_handler,
-    custom_http_exception_handler,
+    behemoth_exception_handler,
     integrity_error_exception_handler,
-    internal_server_error_exception_handler,
     request_validation_exception_handler,
 )
 from app.core.settings import get_settings
@@ -101,11 +95,9 @@ async def add_security_headers(request, call_next):
     return response
 
 app.add_exception_handler(Exception, base_exception_handler)
-app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore
-app.add_exception_handler(InternalServerError, internal_server_error_exception_handler)  # type: ignore
-app.add_exception_handler(BadGatewayError, bad_gateway_error_exception_handler)  # type: ignore
-app.add_exception_handler(CustomHTTPException, custom_http_exception_handler)  # type: ignore
-app.add_exception_handler(IntegrityError, integrity_error_exception_handler)  # type: ignore
+app.add_exception_handler(BehemothException, behemoth_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+app.add_exception_handler(IntegrityError, integrity_error_exception_handler)
 
 if settings.LOGFIRE_TOKEN:
     logfire.configure(

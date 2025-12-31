@@ -7,13 +7,13 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session, pagination_params
-from app.common.exceptions import BadRequest
+from app.common.exceptions import EventNotFoundException
 from app.common.permissions import (
     CurrentUser,
     OrganizerOrAdminUser,
     require_resource_ownership,
 )
-from app.common.schemas import PaginatedResponse
+from app.common.schemas import ErrorResponse, PaginatedResponse
 from app.common.types import PaginationParamsType
 from app.events.models import Event, EventStatus
 from app.events.schemas import (
@@ -138,6 +138,7 @@ async def get_my_events(
     response_model=EventResponse,
     summary="Get event details",
     description="Get detailed information about a specific event",
+    responses={404: {"model": ErrorResponse, "description": "Event not found"}},
 )
 async def get_event(
     event_id: uuid.UUID,
@@ -147,7 +148,7 @@ async def get_event(
     event = await get_event_by_id(session, event_id)
 
     if not event:
-        raise BadRequest("Event not found")
+        raise EventNotFoundException(event_id)
 
     response = EventResponse.model_validate(event)
     response.organizer_ids = [org.id for org in event.organizers]
@@ -160,6 +161,11 @@ async def get_event(
     response_model=EventResponse,
     summary="Update event",
     description="Update event details. Requires organizer or admin permissions.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        409: {"model": ErrorResponse, "description": "Invalid status transition"},
+    },
 )
 async def update_event_endpoint(
     event_id: uuid.UUID,
@@ -171,7 +177,7 @@ async def update_event_endpoint(
     event = await get_event_by_id(session, event_id)
 
     if not event:
-        raise BadRequest("Event not found")
+        raise EventNotFoundException(event_id)
 
     event = await update_event(session, event, event_data, current_user)
 
@@ -186,8 +192,13 @@ async def update_event_endpoint(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete event",
     description="Delete an event. Only creator or admin can delete.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
 )
 async def delete_event_endpoint(
+    event_id: uuid.UUID,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
     event: Event = Depends(require_resource_ownership(Event, "event_id")),
@@ -202,6 +213,11 @@ async def delete_event_endpoint(
     response_model=EventResponse,
     summary="Add organizer to event",
     description="Add a user as an organizer to the event",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event or User not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        422: {"model": ErrorResponse, "description": "User already organizer"},
+    },
 )
 async def add_organizer_endpoint(
     event_id: uuid.UUID,
@@ -213,7 +229,7 @@ async def add_organizer_endpoint(
     event = await get_event_by_id(session, event_id)
 
     if not event:
-        raise BadRequest("Event not found")
+        raise EventNotFoundException(event_id)
 
     event = await add_organizer(session, event, organizer_data, current_user)
 
@@ -228,8 +244,14 @@ async def add_organizer_endpoint(
     response_model=EventResponse,
     summary="Remove organizer from event",
     description="Remove a user from event organizers. Only creator or admin can remove.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        422: {"model": ErrorResponse, "description": "Cannot remove last organizer"},
+    },
 )
 async def remove_organizer_endpoint(
+    event_id: uuid.UUID,
     organizer_id: uuid.UUID,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
