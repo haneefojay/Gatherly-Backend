@@ -46,7 +46,7 @@ async def create_task(
     result = await session.execute(
         select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
     )
-    if result.scalar_one_or_none():
+    if result.scalars().first():
         raise ValidationException(f"Task with title '{task_data.title}' already exists for this event")
 
     # Create task
@@ -120,7 +120,7 @@ async def update_task(
         result = await session.execute(
             select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
         )
-        if result.scalar_one_or_none():
+        if result.scalars().first():
             raise ValidationException(
                 f"Task with title '{task_data.title}' already exists for this event"
             )
