@@ -179,16 +179,19 @@ async def add_organizer(
     if not new_organizer:
         raise NotFoundException("User not found")
 
+    # Allow the creator to be added back regardless of role
+    is_creator = new_organizer.id == event.created_by_id
+
     # Validate target role
-    if new_organizer.role not in [UserRole.ORGANIZER, UserRole.ADMIN]:
+    if not is_creator and new_organizer.role not in [UserRole.ORGANIZER, UserRole.ADMIN]:
         raise ValidationException(
-            "Only users with ORGANIZER or ADMIN roles can be added as event organizers"
+            "Only users with ORGANIZER role can be added as event organizers"
         )
 
     # Only Admin can add an Admin
     if new_organizer.role == UserRole.ADMIN and current_user.role != UserRole.ADMIN:
         raise ForbiddenException(
-            "Only an admin can add another admin as an event organizer"
+            "Only Admin can perform this action"
         )
 
     # Check if already an organizer
@@ -235,6 +238,16 @@ async def remove_organizer(
         ForbiddenException: If user doesn't have permission
         ValidationException: If trying to remove last organizer
     """
+    # Fetch the organizer being removed to check their role
+    result = await session.execute(select(User).where(User.id == organizer_id))
+    target_user = result.scalar_one_or_none()
+
+    # Prevent non-Admins from removing an Admin
+    if target_user and target_user.role == UserRole.ADMIN and current_user.role != UserRole.ADMIN:
+        raise ForbiddenException(
+            "Only Admin can perform this action"
+        )
+
     # Count current organizers
     result = await session.execute(
         select(event_organizers).where(event_organizers.c.event_id == event.id)
