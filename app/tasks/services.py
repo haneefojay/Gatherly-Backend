@@ -42,6 +42,13 @@ async def create_task(
             f"Cannot create tasks for events with status '{event.status.value}'"
         )
 
+    # Check for duplicate task title in this event
+    result = await session.execute(
+        select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
+    )
+    if result.scalar_one_or_none():
+        raise ValidationException(f"Task with title '{task_data.title}' already exists for this event")
+
     # Create task
     task = Task(
         event_id=event.id,
@@ -108,7 +115,15 @@ async def update_task(
         )
 
     # Update fields
-    if task_data.title is not None:
+    if task_data.title is not None and task_data.title != task.title:
+        # Check for duplicate title in this event
+        result = await session.execute(
+            select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
+        )
+        if result.scalar_one_or_none():
+            raise ValidationException(
+                f"Task with title '{task_data.title}' already exists for this event"
+            )
         task.title = task_data.title
     if task_data.description is not None:
         task.description = task_data.description
