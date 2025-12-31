@@ -1,4 +1,4 @@
-"""Task business logic and services"""
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.exceptions import (
     EventStatusException,
     ForbiddenException,
+    NotFoundException,
     ValidationException,
 )
 from app.events.models import Event, EventStatus
@@ -13,6 +14,25 @@ from app.events.services import check_event_permission
 from app.tasks.models import Task
 from app.tasks.schemas import TaskCreate, TaskUpdate
 from app.users.models import User
+
+
+async def validate_assignee(
+    session: AsyncSession, event: Event, assignee_id: uuid.UUID | None
+):
+    """Ensure assignee exists and is a member of the event team"""
+    if not assignee_id:
+        return
+
+    result = await session.execute(select(User).where(User.id == assignee_id))
+    assignee = result.scalar_one_or_none()
+
+    if not assignee:
+        raise NotFoundException("Assignee user not found")
+
+    try:
+        await check_event_permission(session, event, assignee)
+    except ForbiddenException:
+        raise ValidationException("Assignee must be a member of the event team")
 
 
 async def create_task(
@@ -41,6 +61,9 @@ async def create_task(
         raise EventStatusException(
             f"Cannot create tasks for events with status '{event.status.value}'"
         )
+
+    # Validate assignee
+    await validate_assignee(session, event, task_data.assignee_id)
 
     # Check for duplicate task title in this event
     result = await session.execute(
@@ -130,6 +153,7 @@ async def update_task(
     if task_data.completed is not None:
         task.completed = task_data.completed
     if task_data.assignee_id is not None:
+        await validate_assignee(session, event, task_data.assignee_id)
         task.assignee_id = task_data.assignee_id
 
     await session.commit()
