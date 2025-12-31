@@ -3,11 +3,11 @@
 from app.events.schemas.base import (
     AddOrganizerRequest,
     EventBase,
-    EventCreate,
     EventFilterParams,
-    EventResponse,
-    EventUpdate,
 )
+from app.events.schemas.create import EventCreate
+from app.events.schemas.edit import EventUpdate
+from app.events.schemas.response import EventResponse
 
 __all__ = [
     "EventBase",

@@ -18,6 +18,18 @@ class LoginRequest(BaseModel):
         }
 
 
+UserLogin = LoginRequest
+
+
+class TokenPayload(BaseModel):
+    """Payload and subject structure for JWT tokens"""
+
+    sub: str | None = None
+    type: str | None = None
+    exp: int | None = None
+    iat: int | None = None
+
+
 class TokenResponse(BaseModel):
     """Token response schema"""
 

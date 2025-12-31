@@ -86,7 +86,6 @@ class EventStatusException(BehemothException):
 
 
 # --- Backward Compatibility aliases (for existing code) ---
-# Mapping old exception names to new ones to avoid breaking imports immediately
 
 class CustomHTTPException(BehemothException):
     """Adapter for old CustomHTTPException usage"""

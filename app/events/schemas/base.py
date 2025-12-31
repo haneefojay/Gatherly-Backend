@@ -1,7 +1,6 @@
-"""Event schemas for request/response validation"""
+"""Event base schemas"""
 
 from datetime import datetime
-from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -26,108 +25,6 @@ class EventBase(BaseModel):
         if "start_date" in info.data and end_date <= info.data["start_date"]:
             raise ValueError("end_date must be after start_date")
         return end_date
-
-
-class EventCreate(EventBase):
-    """Event creation schema"""
-
-    status: EventStatus = EventStatus.DRAFT
-
-    @field_validator("start_date")
-    @classmethod
-    def validate_start_date(cls, v: datetime):
-        """Validate that start_date is not in the past"""
-        # Compare with current time (naive or aware)
-        now = datetime.now(v.tzinfo)
-        if v < now:
-            raise ValueError("start_date cannot be in the past")
-        return v
-
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "example": {
-                "title": "Tech Conference 2026",
-                "description": "Annual technology conference",
-                "start_date": "2026-06-01T09:00:00",
-                "end_date": "2026-06-01T17:00:00",
-                "location": "Convention Center",
-                "capacity": 500,
-                "status": "draft",
-            }
-        },
-    )
-
-
-class EventUpdate(BaseModel):
-    """Event update schema"""
-
-    title: str | None = Field(None, min_length=1, max_length=255)
-    description: str | None = None
-    start_date: datetime | None = None
-    end_date: datetime | None = None
-    location: str | None = Field(None, max_length=255)
-    capacity: int | None = Field(None, gt=0)
-    status: EventStatus | None = None
-
-    @field_validator("start_date")
-    @classmethod
-    def validate_start_date(cls, v: datetime | None):
-        """Validate that start_date is not in the past"""
-        if v is None:
-            return v
-        # Compare with current time (naive or aware)
-        now = datetime.now(v.tzinfo)
-        if v < now:
-            raise ValueError("start_date cannot be in the past")
-        return v
-
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "example": {
-                "title": "Updated Tech Conference 2026",
-                "status": "upcoming",
-            }
-        },
-    )
-
-
-class EventResponse(EventBase):
-    """Event response schema"""
-
-    id: UUID
-    status: EventStatus
-    current_attendees: int
-    created_by_id: UUID
-    created_at: datetime
-    updated_at: datetime
-    is_full: bool
-    available_spots: int
-    organizer_ids: List[UUID] = []
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_schema_extra={
-            "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "title": "Tech Conference 2026",
-                "description": "Annual technology conference",
-                "start_date": "2026-06-01T09:00:00",
-                "end_date": "2026-06-01T17:00:00",
-                "location": "Convention Center",
-                "capacity": 500,
-                "status": "upcoming",
-                "current_attendees": 150,
-                "created_by_id": "123e4567-e89b-12d3-a456-426614174001",
-                "created_at": "2026-01-01T00:00:00",
-                "updated_at": "2026-01-01T00:00:00",
-                "is_full": False,
-                "available_spots": 350,
-                "organizer_ids": [],
-            }
-        },
-    )
 
 
 class EventFilterParams(BaseModel):
