@@ -212,7 +212,7 @@ async def delete_event_endpoint(
     "/{event_id}/organizers",
     response_model=EventResponse,
     summary="Add organizer to event",
-    description="Add a user as an organizer to the event",
+    description="Add a user as an organizer to the event. Only creator or admin can add.",
     responses={
         404: {"model": ErrorResponse, "description": "Event or User not found"},
         403: {"model": ErrorResponse, "description": "Permission denied"},
@@ -224,13 +224,9 @@ async def add_organizer_endpoint(
     organizer_data: AddOrganizerRequest,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
+    event: Event = Depends(require_resource_ownership(Event, "event_id")),
 ):
     """Add organizer to event"""
-    event = await get_event_by_id(session, event_id)
-
-    if not event:
-        raise EventNotFoundException(event_id)
-
     event = await add_organizer(session, event, organizer_data, current_user)
 
     response = EventResponse.model_validate(event)

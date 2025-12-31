@@ -179,6 +179,18 @@ async def add_organizer(
     if not new_organizer:
         raise NotFoundException("User not found")
 
+    # Validate target role
+    if new_organizer.role not in [UserRole.ORGANIZER, UserRole.ADMIN]:
+        raise ValidationException(
+            "Only users with ORGANIZER or ADMIN roles can be added as event organizers"
+        )
+
+    # Only Admin can add an Admin
+    if new_organizer.role == UserRole.ADMIN and current_user.role != UserRole.ADMIN:
+        raise ForbiddenException(
+            "Only an admin can add another admin as an event organizer"
+        )
+
     # Check if already an organizer
     result = await session.execute(
         select(event_organizers).where(
