@@ -67,7 +67,7 @@ class EventNotFoundException(NotFoundException):
     """Specific event not found error"""
 
     def __init__(self, event_id: Any, details: dict | None = None):
-        super().__init__(f"Event with ID {event_id} not found", details)
+        super().__init__("Event not found", details)
         self.error_code = "EventNotFound"
 
 

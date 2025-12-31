@@ -3,7 +3,11 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.exceptions import BadRequest, Forbidden
+from app.common.exceptions import (
+    EventStatusException,
+    ForbiddenException,
+    ValidationException,
+)
 from app.events.models import Event, EventStatus
 from app.events.services import check_event_permission
 from app.tasks.models import Task
@@ -26,15 +30,15 @@ async def create_task(
         Created task instance
 
     Raises:
-        Forbidden: If user doesn't have permission
-        BadRequest: If event status doesn't allow task creation
+        ForbiddenException: If user doesn't have permission
+        EventStatusException: If event status doesn't allow task creation
     """
-    # Check permissions
+    # Check permissions (organizer/admin)
     await check_event_permission(session, event, current_user)
 
     # Check event status
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
-        raise BadRequest(
+        raise EventStatusException(
             f"Cannot create tasks for events with status '{event.status.value}'"
         )
 
@@ -68,24 +72,38 @@ async def update_task(
         Updated task instance
 
     Raises:
-        Forbidden: If user doesn't have permission
-        BadRequest: If event status doesn't allow modification
+        ForbiddenException: If user doesn't have permission
+        EventStatusException: If event status doesn't allow modification
     """
     # Get event
     result = await session.execute(select(Event).where(Event.id == task.event_id))
     event = result.scalar_one()
 
-    # Check permissions (organizer or assignee can update)
+    # Check permissions
+    is_manager = True
     try:
         await check_event_permission(session, event, current_user)
-    except Forbidden:
-        # If not organizer, check if user is assignee
+    except ForbiddenException:
+        is_manager = False
+
+    if not is_manager:
+        # If not organizer/admin, must be the assignee
         if task.assignee_id != current_user.id:
-            raise Forbidden("You don't have permission to modify this task")
+            raise ForbiddenException("You don't have permission to modify this task")
+
+        # Assignees can ONLY update the 'completed' status
+        if (
+            task_data.title is not None
+            or task_data.description is not None
+            or task_data.assignee_id is not None
+        ):
+            raise ForbiddenException(
+                "Assignees can only update the completion status of their assigned tasks"
+            )
 
     # Check event status
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
-        raise BadRequest(
+        raise EventStatusException(
             f"Cannot modify tasks for events with status '{event.status.value}'"
         )
 
@@ -114,7 +132,7 @@ async def delete_task(session: AsyncSession, task: Task, current_user: User) -> 
         current_user: User performing the deletion
 
     Raises:
-        Forbidden: If user doesn't have permission
+        ForbiddenException: If user doesn't have permission
     """
     # Get event
     result = await session.execute(select(Event).where(Event.id == task.event_id))
