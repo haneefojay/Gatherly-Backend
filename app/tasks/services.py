@@ -117,19 +117,10 @@ async def update_task(
         is_manager = False
 
     if not is_manager:
-        # If not organizer/admin, must be the assignee
-        if task.assignee_id != current_user.id:
-            raise ForbiddenException("You don't have permission to modify this task")
-
-        # Assignees can ONLY update the 'completed' status
-        if (
-            task_data.title is not None
-            or task_data.description is not None
-            or task_data.assignee_id is not None
-        ):
-            raise ForbiddenException(
-                "Assignees can only update the completion status of their assigned tasks"
-            )
+        # If not organizer/admin, must be the assignee AND must still be on the team
+        # (Though technically check_event_permission already checks if you're on the team,
+        # so if it failed, you lose access even as assignee).
+        raise ForbiddenException("You don't have permission to modify this task")
 
     # Check event status
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
