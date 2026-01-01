@@ -23,7 +23,6 @@ from app.users.schemas import UserCreate
 settings = get_settings()
 ph = PasswordHasher()
 
-# Token generators
 access_token_generator = TokenGenerator(
     secret_key=settings.SECRET_KEY,
     expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -48,17 +47,14 @@ async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
     Raises:
         ValidationException: If email already exists
     """
-    # Check if email already exists
     result = await session.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
         raise ValidationException("Email already registered")
 
-    # Hash password
     hashed_password = ph.hash(user_data.password)
 
-    # Create user
     user = User(
         email=user_data.email,
         full_name=user_data.full_name,
@@ -109,7 +105,9 @@ async def create_access_token(user: User) -> str:
         JWT access token string
     """
     sub = f"user-{user.id}"
-    return await access_token_generator.generate(sub, token_type="access")
+    return await access_token_generator.generate(
+        sub, token_type="access", role=user.role.value
+    )
 
 
 async def create_refresh_token(session: AsyncSession, user: User) -> str:
@@ -122,14 +120,10 @@ async def create_refresh_token(session: AsyncSession, user: User) -> str:
     Returns:
         JWT refresh token string
     """
-    # Generate refresh token
     sub = f"user-{user.id}"
     token = await refresh_token_generator.generate(sub, token_type="refresh")
 
-    # Hash token for storage
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-
-    # Store refresh token in database
     refresh_token = RefreshToken(
         token_hash=token_hash,
         user_id=user.id,
@@ -155,7 +149,6 @@ async def verify_refresh_token(session: AsyncSession, token: str) -> User:
     Raises:
         UnauthorizedException: If token is invalid or expired
     """
-    # Verify token signature and extract user ID
     user_id_str = await refresh_token_generator.verify(token, "user")
 
     if not user_id_str:
@@ -163,15 +156,13 @@ async def verify_refresh_token(session: AsyncSession, token: str) -> User:
 
     user_id = uuid.UUID(user_id_str)
 
-    # Hash token to check against database
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-    # Check if token exists and is not revoked
     result = await session.execute(
         select(RefreshToken).where(
             RefreshToken.token_hash == token_hash,
             RefreshToken.user_id == user_id,
-            RefreshToken.is_revoked == False,  # noqa: E712
+            RefreshToken.is_revoked == False,
             RefreshToken.expires_at > datetime.utcnow(),
         )
     )
@@ -180,7 +171,6 @@ async def verify_refresh_token(session: AsyncSession, token: str) -> User:
     if not refresh_token:
         raise UnauthorizedException("Invalid or expired refresh token")
 
-    # Get user
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
@@ -200,10 +190,8 @@ async def revoke_refresh_token(session: AsyncSession, token: str) -> None:
     Raises:
         UnauthorizedException: If token is invalid
     """
-    # Hash token
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-    # Find and revoke token
     result = await session.execute(
         select(RefreshToken).where(RefreshToken.token_hash == token_hash)
     )

@@ -53,26 +53,21 @@ async def create_task(
         ForbiddenException: If user doesn't have permission
         EventStatusException: If event status doesn't allow task creation
     """
-    # Check permissions (organizer/admin)
     await check_event_permission(session, event, current_user)
 
-    # Check event status
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
         raise EventStatusException(
             f"Cannot create tasks for events with status '{event.status.value}'"
         )
 
-    # Validate assignee
     await validate_assignee(session, event, task_data.assignee_id)
 
-    # Check for duplicate task title in this event
     result = await session.execute(
         select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
     )
     if result.scalars().first():
         raise ValidationException(f"Task with title '{task_data.title}' already exists for this event")
 
-    # Create task
     task = Task(
         event_id=event.id,
         title=task_data.title,
@@ -105,11 +100,9 @@ async def update_task(
         ForbiddenException: If user doesn't have permission
         EventStatusException: If event status doesn't allow modification
     """
-    # Get event
     result = await session.execute(select(Event).where(Event.id == task.event_id))
     event = result.scalar_one()
 
-    # Check permissions
     is_manager = True
     try:
         await check_event_permission(session, event, current_user)
@@ -117,20 +110,24 @@ async def update_task(
         is_manager = False
 
     if not is_manager:
-        # If not organizer/admin, must be the assignee AND must still be on the team
-        # (Though technically check_event_permission already checks if you're on the team,
-        # so if it failed, you lose access even as assignee).
-        raise ForbiddenException("You don't have permission to modify this task")
+        if task.assignee_id != current_user.id:
+            raise ForbiddenException("You don't have permission to modify this task")
+        
+        restricted_updates = [
+            task_data.title is not None and task_data.title != task.title,
+            task_data.description is not None and task_data.description != task.description,
+            task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id,
+        ]
+        
+        if any(restricted_updates):
+            raise ForbiddenException("Assignees can only update the completion status of a task")
 
-    # Check event status
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
         raise EventStatusException(
             f"Cannot modify tasks for events with status '{event.status.value}'"
         )
 
-    # Update fields
     if task_data.title is not None and task_data.title != task.title:
-        # Check for duplicate title in this event
         result = await session.execute(
             select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
         )
@@ -164,11 +161,9 @@ async def delete_task(session: AsyncSession, task: Task, current_user: User) -> 
     Raises:
         ForbiddenException: If user doesn't have permission
     """
-    # Get event
     result = await session.execute(select(Event).where(Event.id == task.event_id))
     event = result.scalar_one()
 
-    # Check permissions
     await check_event_permission(session, event, current_user)
 
     await session.delete(task)

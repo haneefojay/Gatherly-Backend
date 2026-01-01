@@ -26,13 +26,11 @@ settings = get_settings()
 ModelT = TypeVar("ModelT", bound=DBBase)
 
 
-# Define security scheme
 security = HTTPBearer()
 
-# Access token verifier
 access_token_verifier = TokenGenerator(
     secret_key=settings.SECRET_KEY,
-    expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,  # Not used for verification, but required by TokenGenerator
+    expire_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 
 
@@ -65,7 +63,6 @@ def require_resource_ownership(
             raise InternalServerError(f"Path parameter '{id_param}' not found")
 
         try:
-            # Handle UUID conversion if necessary
             resource_uuid = uuid.UUID(str(resource_id))
         except ValueError:
             raise BadRequest("Invalid ID format")
@@ -74,11 +71,10 @@ def require_resource_ownership(
         if not resource:
             raise NotFoundException(f"{model.__name__} with ID {resource_id} not found")
 
-        # Check permission: Admin or Owner
         if user.role != UserRole.ADMIN:
             owner_id = getattr(resource, owner_field, None)
             if owner_id != user.id:
-                raise ForbiddenException("Only the creator or an admin can perform this action")
+                raise ForbiddenException("Insufficient permissions")
 
         return resource
 
@@ -106,7 +102,7 @@ async def get_current_user(
     user_id_str = await access_token_verifier.verify(token, "user")
 
     if not user_id_str:
-        raise Unauthorized("Invalid access token")
+        raise UnauthorizedException("Invalid access token")
 
     user_id = uuid.UUID(user_id_str)
 
@@ -114,7 +110,7 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:
-        raise Unauthorized("User not found or inactive")
+        raise UnauthorizedException("User not found or inactive")
 
     return user
 
@@ -141,9 +137,7 @@ def require_role(*allowed_roles: UserRole):
 
     async def check_role(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in allowed_roles:
-            raise Forbidden(
-                f"Access denied. Required roles: {[role.value for role in allowed_roles]}"
-            )
+            raise ForbiddenException("Insufficient permissions")
         return current_user
 
     return check_role

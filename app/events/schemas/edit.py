@@ -22,7 +22,6 @@ class EventUpdate(BaseModel):
         """Validate that start_date is not in the past"""
         if v is None:
             return v
-        # Compare with current time (naive or aware)
         now = datetime.now(v.tzinfo)
         if v < now:
             raise ValueError("start_date cannot be in the past")

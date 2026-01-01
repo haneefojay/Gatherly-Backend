@@ -54,7 +54,6 @@ async def login(
     if not user:
         raise Unauthorized("Invalid email or password")
 
-    # Generate tokens
     access_token = await create_access_token(user)
     refresh_token = await create_refresh_token(session, user)
 
@@ -76,7 +75,6 @@ async def refresh_access_token(
     """Refresh access token using refresh token"""
     user = await verify_refresh_token(session, token_data.refresh_token)
 
-    # Generate new access token
     access_token = await create_access_token(user)
 
     return AccessTokenResponse(access_token=access_token)

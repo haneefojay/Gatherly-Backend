@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -16,7 +16,7 @@ class BehemothException(Exception):
         self.error_code = error_code
         self.status_code = status_code
         self.details = details
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
 
     def __str__(self) -> str:
         return f"[{self.error_code}] {self.message}"

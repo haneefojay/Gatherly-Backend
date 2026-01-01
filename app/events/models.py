@@ -64,7 +64,7 @@ class Event(DBBase):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    # Full-text search vector (PostgreSQL specific)
+
     search_vector = Column(TSVECTOR)
 
     # Relationships

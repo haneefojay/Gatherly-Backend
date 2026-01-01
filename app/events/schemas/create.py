@@ -15,7 +15,6 @@ class EventCreate(EventBase):
     @classmethod
     def validate_start_date(cls, v: datetime):
         """Validate that start_date is not in the past"""
-        # Compare with current time (naive or aware)
         now = datetime.now(v.tzinfo)
         if v < now:
             raise ValueError("start_date cannot be in the past")

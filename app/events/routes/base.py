@@ -6,6 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.cache import CacheManager
 from app.common.dependencies import get_session, pagination_params
 from app.common.exceptions import EventNotFoundException
 from app.common.permissions import (
@@ -50,7 +51,6 @@ async def create_event_endpoint(
     """Create a new event"""
     event = await create_event(session, event_data, current_user)
 
-    # Build response with organizer IDs
     response = EventResponse.model_validate(event)
     response.organizer_ids = [org.id for org in event.organizers]
 
@@ -75,7 +75,6 @@ async def list_events(
     search: str | None = Query(None, description="Search in title and description"),
 ):
     """List events with filtering and search"""
-    # Build filters
     filters = EventFilterParams(
         status=status_filter,
         location=location,
@@ -85,22 +84,37 @@ async def list_events(
         has_capacity=has_capacity,
     )
 
+    cache_data = {
+        "page": pagination.page,
+        "size": pagination.size,
+        "order_by": pagination.order_by,
+        "filters": filters.model_dump() if hasattr(filters, "model_dump") else filters.__dict__,
+        "search": search
+    }
+    cache = CacheManager(ttl=60, cache_prefix="events:list:", data=cache_data)
+    cached_response = await cache.get()
+    if cached_response:
+        return cached_response
+
     events, total = await get_events(session, filters, pagination, search)
 
-    # Build responses with organizer IDs
     items = []
     for event in events:
         response = EventResponse.model_validate(event)
         response.organizer_ids = [org.id for org in event.organizers]
-        items.append(response)
+        items.append(response.model_dump())
 
-    return PaginatedResponse(
-        items=items,
-        total=total,
-        page=pagination.page,
-        size=pagination.size,
-        pages=(total + pagination.size - 1) // pagination.size,
-    )
+    response_data = {
+        "items": items,
+        "total": total,
+        "page": pagination.page,
+        "size": pagination.size,
+        "pages": (total + pagination.size - 1) // pagination.size,
+    }
+    
+    await cache.set(response_data)
+
+    return response_data
 
 
 @router.get(
@@ -117,7 +131,6 @@ async def get_my_events(
     """Get current user's events"""
     events, total = await get_user_events(session, current_user.id, pagination)
 
-    # Build responses
     items = []
     for event in events:
         response = EventResponse.model_validate(event)

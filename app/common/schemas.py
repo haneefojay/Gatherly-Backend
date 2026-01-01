@@ -30,8 +30,6 @@ class PaginatedResponseSchema(ResponseSchema):
 
     meta: PaginationSchema = Field(description="The pagination metadata")
 
-
-# Modern generic paginated response
 from typing import Generic, List, TypeVar
 
 T = TypeVar("T")

@@ -8,7 +8,6 @@ class RouteTags(BaseModel):
     Base model for app route tags
     """
 
-    # Module Tags
     SAMPLE: str = "Sample APIs"
 
 

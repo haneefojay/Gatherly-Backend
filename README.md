@@ -181,7 +181,8 @@ curl -X POST http://localhost:8000/auth/signup \
   -d '{
     "email": "user@example.com",
     "full_name": "John Doe",
-    "password": "SecurePass123!"
+    "password": "SecurePass123!",
+    "role": "organizer"
   }'
 ```
 
@@ -220,43 +221,31 @@ curl -X POST http://localhost:8000/events/{event_id}/register \
 
 | Endpoint | User | Organizer | Admin |
 |----------|------|-----------|-------|
-| Create Event | ✅ | ✅ | ✅ |
+| Create Event | ❌ | ✅ | ✅ |
 | Update Own Event | ✅ | ✅ | ✅ |
 | Update Any Event | ❌ | ❌ | ✅ |
 | Delete Own Event | ✅ | ✅ | ✅ |
 | Delete Any Event | ❌ | ❌ | ✅ |
-| Create Task | Owner/Organizer | ✅ | ✅ |
-| Update Task | Owner/Organizer/Assignee | ✅ | ✅ |
-| View Attendees | Owner/Organizer | ✅ | ✅ |
+| Create Task | ❌ | ✅ | ✅ |
+| Update Task | Assignee* | ✅ | ✅ |
+| View Attendees | ❌ | ✅ | ✅ |
 | Update User Roles | ❌ | ❌ | ✅ |
+
+\* Assignees can only update the completion status of a task.
 
 ## 🧪 Testing
 
 ```bash
 # Run all tests
-uv run pytest tests/ -v
-
-# Run with coverage
-uv run pytest tests/ --cov=app --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_auth.py -v
+uv run pytest -v tests/
 ```
 
 ## 📊 Rate Limiting
 
-Default configuration: **3 requests/second** per endpoint
-
-To modify, edit `app/main.py`:
-```python
-REQ_RATE = 3        # Number of requests
-REQ_RATE_TIME = 1   # Time window in seconds
-```
-
-For production, implement user-specific rate limiting based on roles:
-- Users: 100 requests/hour
-- Organizers: 200 requests/hour
-- Admins: 500 requests/hour
+The system implements a **Senior Assessment Grade** rate limiting policy:
+- **Rate**: 100 requests per hour.
+- **Identifier**: Custom logic that prioritizes JWT `sub` (User ID) to ensure per-user limiting, falling back to IP address for anonymous traffic.
+- **Implementation**: Built with `FastAPILimiter` and Redis.
 
 ## 🐳 Docker Deployment
 

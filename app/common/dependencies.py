@@ -13,7 +13,7 @@ async def get_session():
     """
     Start a db session
     """
-    async with AsyncSessionLocal() as session:  # type: ignore
+    async with AsyncSessionLocal() as session:
         yield session
 
 
@@ -29,10 +29,9 @@ def pagination_params(
     return PaginationParamsType(q=q, page=page, size=size, order_by=order_by)
 
 
-def get_redis_client():
+async def get_redis_client():
     """
-    Helper dependency for redis
+    Helper dependency for redis. Returns a singleton client.
     """
-    return redis.from_url(
-        settings.REDIS_BROKER_URL, encoding="utf-8", decode_responses=True
-    )
+    from app.core.redis_utils import RedisClient
+    return await RedisClient.get_client()

@@ -1,4 +1,3 @@
-# type: ignore
 from typing import Generic, Type, TypeVar
 
 from bson import ObjectId
@@ -6,7 +5,6 @@ from pymongo.collection import Collection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-# Types
 T = TypeVar("T")
 P = TypeVar("P")
 

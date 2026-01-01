@@ -35,7 +35,7 @@ class EventFilterParams(BaseModel):
     start_date_from: datetime | None = None
     start_date_to: datetime | None = None
     organizer_id: UUID | None = None
-    has_capacity: bool | None = None  # Filter events with available spots
+    has_capacity: bool | None = None
 
     model_config = ConfigDict(
         json_schema_extra={

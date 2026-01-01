@@ -10,7 +10,7 @@ from app.attendees.models import Attendee, AttendeeStatus
 from app.attendees.schemas import AttendeeResponse, RegistrationResponse
 from app.attendees.services import register_for_event, unregister_from_event
 from app.common.dependencies import get_session
-from app.common.exceptions import BadRequest
+from app.common.exceptions import EventNotFoundException
 from app.common.permissions import CurrentUser, OrganizerOrAdminUser
 from app.events.selectors import get_event_by_id
 
@@ -33,7 +33,7 @@ async def register_for_event_endpoint(
     event = await get_event_by_id(session, event_id)
 
     if not event:
-        raise BadRequest("Event not found")
+        raise EventNotFoundException(event_id)
 
     attendee, message, waitlist_position = await register_for_event(
         session, event, current_user
@@ -61,7 +61,7 @@ async def unregister_from_event_endpoint(
     event = await get_event_by_id(session, event_id)
 
     if not event:
-        raise BadRequest("Event not found")
+        raise EventNotFoundException(event_id)
 
     await unregister_from_event(session, event, current_user)
     return None

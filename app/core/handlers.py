@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request, status
 from fastapi.encoders import jsonable_encoder
@@ -10,7 +10,6 @@ from app.common.exceptions import BehemothException
 from app.common.schemas import ErrorResponse
 from app.core.settings import get_settings
 
-# Globals
 settings = get_settings()
 
 
@@ -54,7 +53,7 @@ async def integrity_error_exception_handler(_: Request, exc: IntegrityError):
                 error=code,
                 message=msg,
                 details={"original_error": str(exc)},
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ).model_dump()
         ),
     )
@@ -71,7 +70,7 @@ async def request_validation_exception_handler(_: Request, exc: RequestValidatio
                 error="ValidationError",
                 message="Input validation failed",
                 details={"errors": exc.errors()},
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ).model_dump()
         ),
     )
@@ -92,7 +91,7 @@ async def base_exception_handler(_: Request, exc: Exception):
                 error="InternalServerError",
                 message="An unexpected error occurred",
                 details=None,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             ).model_dump()
         ),
     )

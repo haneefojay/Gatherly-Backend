@@ -7,7 +7,6 @@ from logfire import info, instrument
 
 from app.common.dependencies import get_redis_client
 
-# Type vars
 T = TypeVar("T")
 
 
@@ -44,11 +43,13 @@ class CacheManager(Generic[T]):
             cache_prefix: The cache prefix
             data: Dictionary containing the data to generate cache key from
         """
-        self.redis_client = get_redis_client()
         self.ttl = ttl
         self.model_class = model_class
         self.cache_prefix = cache_prefix
         self.data = data
+
+    async def _get_client(self):
+        return await get_redis_client()
 
     @instrument("Get cached data from Redis")
     async def get(self) -> T | None:
@@ -58,10 +59,11 @@ class CacheManager(Generic[T]):
         Returns:
             Cached data if found, None otherwise
         """
+        client = await self._get_client()
         cache_key = generate_cache_key(self.data, self.cache_prefix)
         info(f"Looking for cache key: {cache_key}")
 
-        cached_data = await self.redis_client.get(cache_key)
+        cached_data = await client.get(cache_key)
         if not cached_data:
             info(f"Cache miss for key: {cache_key}")
             return None
@@ -69,11 +71,10 @@ class CacheManager(Generic[T]):
         info(f"Cache hit for key: {cache_key}")
         data = json.loads(cached_data)
 
-        # If model_class is provided, parse into that model
         if self.model_class:
             return self.model_class(**data)
 
-        return data  # type: ignore
+        return data
 
     @instrument("Set cached data in Redis")
     async def set(
@@ -86,11 +87,12 @@ class CacheManager(Generic[T]):
         Args:
             value: The value to cache (will be JSON-encoded)
         """
+        client = await self._get_client()
         cache_key = generate_cache_key(self.data, self.cache_prefix)
         info(f"Setting cache key: {cache_key}")
 
         encoded_data = json.dumps(jsonable_encoder(value))
 
-        await self.redis_client.setex(cache_key, self.ttl, encoded_data)
+        await client.setex(cache_key, self.ttl, encoded_data)
 
         info(f"Cache key {cache_key} set with TTL {self.ttl}")

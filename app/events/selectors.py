@@ -7,7 +7,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.common.exceptions import BadRequest
 from app.common.types import PaginationParamsType
 from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import EventFilterParams
@@ -48,12 +47,12 @@ async def get_events(
     Returns:
         Tuple of (events list, total count)
     """
-    # Base query
+
     query = select(Event).options(
         selectinload(Event.organizers), selectinload(Event.created_by)
     )
 
-    # Apply filters
+
     conditions = []
 
     if filters:
@@ -76,12 +75,10 @@ async def get_events(
                 conditions.append(Event.current_attendees >= Event.capacity)
 
         if filters.organizer_id:
-            # Join with event_organizers to filter by organizer
             query = query.join(
                 event_organizers, Event.id == event_organizers.c.event_id
             ).where(event_organizers.c.user_id == filters.organizer_id)
 
-    # Apply search query (simple ILIKE search on title and description)
     if search_query:
         search_conditions = [
             Event.title.ilike(f"%{search_query}%"),
@@ -92,23 +89,18 @@ async def get_events(
     if conditions:
         query = query.where(and_(*conditions))
 
-    # Count total
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Apply sorting
     if pagination and pagination.order_by == "asc":
         query = query.order_by(Event.start_date.asc())
     else:
         query = query.order_by(Event.start_date.desc())
 
-    # Apply pagination
     if pagination:
         offset = (pagination.page - 1) * pagination.size
         query = query.offset(offset).limit(pagination.size)
-
-    # Execute query
     result = await session.execute(query)
     events = list(result.scalars().all())
 
@@ -130,7 +122,6 @@ async def get_user_events(
     Returns:
         Tuple of (events list, total count)
     """
-    # Query for events created by user or where user is organizer
     query = (
         select(Event)
         .outerjoin(event_organizers, Event.id == event_organizers.c.event_id)
@@ -144,20 +135,15 @@ async def get_user_events(
         .distinct()
     )
 
-    # Count total
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-
-    # Apply sorting
     query = query.order_by(Event.start_date.desc())
 
-    # Apply pagination
     if pagination:
         offset = (pagination.page - 1) * pagination.size
         query = query.offset(offset).limit(pagination.size)
 
-    # Execute query
     result = await session.execute(query)
     events = list(result.scalars().all())
 

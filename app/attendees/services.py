@@ -32,13 +32,11 @@ async def register_for_event(
         EventStatusException: If event status invalid
         ValidationException: If already registered
     """
-    # Check if event allows registration
     if event.status not in [EventStatus.DRAFT, EventStatus.UPCOMING]:
         raise EventStatusException(
             f"Cannot register for events with status '{event.status.value}'"
         )
 
-    # Check if a record already exists (any status)
     result = await session.execute(
         select(Attendee).where(
             Attendee.event_id == event.id,
@@ -50,17 +48,13 @@ async def register_for_event(
     if existing_attendee and existing_attendee.status != AttendeeStatus.CANCELLED:
         raise ValidationException("Already registered for this event")
 
-    # Determine status based on capacity
     if event.current_attendees < event.capacity:
         status = AttendeeStatus.REGISTERED
         message = "Successfully registered for event"
         waitlist_position = None
-
-        # Increment attendee count
         event.current_attendees += 1
     else:
         status = AttendeeStatus.WAITLISTED
-        # Get waitlist position
         result = await session.execute(
             select(func.count()).select_from(
                 select(Attendee).where(
@@ -73,12 +67,10 @@ async def register_for_event(
         message = f"Event is full. Added to waitlist at position {waitlist_position}"
 
     if existing_attendee:
-        # Reactivate existing cancelled record
         existing_attendee.status = status
-        existing_attendee.registered_at = datetime.utcnow()  # Update timestamp
+        existing_attendee.registered_at = datetime.utcnow()
         attendee = existing_attendee
     else:
-        # Create new attendee record
         attendee = Attendee(
             event_id=event.id,
             user_id=user.id,
@@ -106,7 +98,6 @@ async def unregister_from_event(
     Raises:
         NotFoundException: If not registered
     """
-    # Get attendee record
     result = await session.execute(
         select(Attendee).where(
             Attendee.event_id == event.id,
@@ -121,15 +112,13 @@ async def unregister_from_event(
 
     was_registered = attendee.status == AttendeeStatus.REGISTERED
 
-    # Mark as cancelled
+
     attendee.status = AttendeeStatus.CANCELLED
     await session.flush()
 
-    # If was registered, decrement count and promote from waitlist
     if was_registered:
         event.current_attendees -= 1
 
-        # Promote first person from waitlist
         result = await session.execute(
             select(Attendee)
             .where(
