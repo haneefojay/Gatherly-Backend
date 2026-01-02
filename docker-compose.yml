@@ -3,20 +3,20 @@ version: '3.8'
 services:
   behemoth_fastapi:
     build: .
-    command: bash -c 'while !</dev/tcp/behemoth_db/5432; do sleep 1; done; alembic upgrade head; uvicorn app.main:app --host 0.0.0.0 --port 8000'
-    volumes:
-      - .:/app
     ports:
       - 8000:8000
     environment:
       - DEBUG=true
-      - LOGFIRE_TOKEN=supersecret
+      - PORT=8000
+      - LOGFIRE_TOKEN=your_token_here
       - POSTGRES_DATABASE_URL=postgresql+asyncpg://behemoth:backend@behemoth_db:5432/behemoth_db
       - REDIS_BROKER_URL=redis://redis:6379/0
-      - SECRET_KEY=supersecretkeyforjwtdevelopmentonly
+      - SECRET_KEY=your_secret_key_here
     depends_on:
-      - behemoth_db
-      - redis
+      behemoth_db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - behemoth_network
 
@@ -30,6 +30,11 @@ services:
       - POSTGRES_USER=behemoth
       - POSTGRES_PASSWORD=backend
       - POSTGRES_DB=behemoth_db
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U behemoth -d behemoth_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - behemoth_network
 
