@@ -32,10 +32,11 @@ async def register_for_event(
         EventStatusException: If event status invalid
         ValidationException: If already registered
     """
-    if event.status not in [EventStatus.DRAFT, EventStatus.UPCOMING]:
+
+    if event.status != EventStatus.UPCOMING:
         raise EventStatusException(
             f"Cannot register for events with status '{event.status.value}'"
-        )
+        )  
 
     result = await session.execute(
         select(Attendee).where(
@@ -97,7 +98,9 @@ async def unregister_from_event(
 
     Raises:
         NotFoundException: If not registered
+        EventStatusException: If event status invalid
     """
+    
     result = await session.execute(
         select(Attendee).where(
             Attendee.event_id == event.id,
@@ -109,6 +112,11 @@ async def unregister_from_event(
 
     if not attendee:
         raise NotFoundException("Not registered for this event")
+
+    if event.status != EventStatus.UPCOMING:
+        raise EventStatusException(
+            f"Cannot unregister from events with status '{event.status.value}'"
+        )
 
     was_registered = attendee.status == AttendeeStatus.REGISTERED
 

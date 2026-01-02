@@ -14,7 +14,8 @@ async def role_based_rate_limiter(request: Request, response: Response):
     Limits:
     - Admin: 500 req/hour
     - Organizer: 200 req/hour
-    - User/Guest: 100 req/hour
+    - User: 100 req/hour
+    - Guest: 30 req/hour
     """
     if settings.TESTING:
         return
@@ -39,6 +40,8 @@ async def role_based_rate_limiter(request: Request, response: Response):
                 times = settings.REQ_RATE_ADMIN
             elif role == "organizer":
                 times = settings.REQ_RATE_ORGANIZER
+            elif role == "user":
+                times = settings.REQ_RATE_USER
                 
         except Exception:
             pass

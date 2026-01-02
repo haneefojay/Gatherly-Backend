@@ -9,7 +9,8 @@ async def test_register_and_waitlist_logic(client: AsyncClient, auth_headers: di
         "title": f"Limited Capacity Event {uuid.uuid4()}",
         "start_date": "2026-07-01T10:00:00",
         "end_date": "2026-07-01T11:00:00",
-        "capacity": 1
+        "capacity": 1,
+        "status": "upcoming"
     }
     event_res = await client.post("/events", json=event_data, headers=auth_headers)
     assert event_res.status_code == 201

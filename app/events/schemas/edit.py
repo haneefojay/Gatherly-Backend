@@ -15,6 +15,7 @@ class EventUpdate(BaseModel):
     location: str | None = Field(None, max_length=255)
     capacity: int | None = Field(None, gt=0)
     status: EventStatus | None = None
+    is_archived: bool | None = None
 
     @field_validator("start_date")
     @classmethod

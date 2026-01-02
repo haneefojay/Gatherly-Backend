@@ -52,7 +52,7 @@ async def integrity_error_exception_handler(_: Request, exc: IntegrityError):
             ErrorResponse(
                 error=code,
                 message=msg,
-                details={"original_error": str(exc)},
+                details=None,
                 timestamp=datetime.now(timezone.utc),
             ).model_dump()
         ),
@@ -69,7 +69,7 @@ async def request_validation_exception_handler(_: Request, exc: RequestValidatio
             ErrorResponse(
                 error="ValidationError",
                 message="Input validation failed",
-                details={"errors": exc.errors()},
+                details=None,
                 timestamp=datetime.now(timezone.utc),
             ).model_dump()
         ),

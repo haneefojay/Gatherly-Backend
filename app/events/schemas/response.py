@@ -18,6 +18,7 @@ class EventResponse(EventBase):
     created_at: datetime
     updated_at: datetime
     is_full: bool
+    is_archived: bool
     available_spots: int
     organizer_ids: List[UUID] = []
 
@@ -33,6 +34,7 @@ class EventResponse(EventBase):
                 "location": "Convention Center",
                 "capacity": 500,
                 "status": "upcoming",
+                "is_archived": False,
                 "current_attendees": 150,
                 "created_by_id": "123e4567-e89b-12d3-a456-426614174001",
                 "created_at": "2026-01-01T00:00:00",

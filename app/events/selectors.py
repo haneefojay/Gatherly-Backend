@@ -79,12 +79,16 @@ async def get_events(
                 event_organizers, Event.id == event_organizers.c.event_id
             ).where(event_organizers.c.user_id == filters.organizer_id)
 
+        if filters.is_archived is not None:
+            conditions.append(Event.is_archived == filters.is_archived)
+        else:
+            conditions.append(Event.is_archived == False)
+    else:
+        conditions.append(Event.is_archived == False)
+
     if search_query:
-        search_conditions = [
-            Event.title.ilike(f"%{search_query}%"),
-            Event.description.ilike(f"%{search_query}%"),
-        ]
-        conditions.append(or_(*search_conditions))
+        # Senior Tip: Using TSVECTOR for performance and scalability
+        query = query.where(Event.search_vector.match(search_query))
 
     if conditions:
         query = query.where(and_(*conditions))
@@ -93,10 +97,18 @@ async def get_events(
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
 
+    sort_mapping = {
+        "date": Event.start_date,
+        "popularity": Event.current_attendees,
+        "title": Event.title,
+        "created_at": Event.created_at,
+    }
+    sort_attr = sort_mapping.get(pagination.sort_by, Event.start_date) if pagination else Event.start_date
+
     if pagination and pagination.order_by == "asc":
-        query = query.order_by(Event.start_date.asc())
+        query = query.order_by(sort_attr.asc())
     else:
-        query = query.order_by(Event.start_date.desc())
+        query = query.order_by(sort_attr.desc())
 
     if pagination:
         offset = (pagination.page - 1) * pagination.size
@@ -111,6 +123,7 @@ async def get_user_events(
     session: AsyncSession,
     user_id: uuid.UUID,
     pagination: PaginationParamsType | None = None,
+    is_archived: bool = False,
 ) -> tuple[List[Event], int]:
     """Get events created by or organized by a user
 
@@ -118,6 +131,7 @@ async def get_user_events(
         session: Database session
         user_id: User ID
         pagination: Pagination parameters
+        is_archived: Whether to fetch archived events
 
     Returns:
         Tuple of (events list, total count)
@@ -131,6 +145,15 @@ async def get_user_events(
                 event_organizers.c.user_id == user_id,
             )
         )
+    )
+
+    if is_archived:
+        query = query.where(Event.is_archived == True)
+    else:
+        query = query.where(Event.is_archived == False)
+
+    query = (
+        query
         .options(selectinload(Event.organizers), selectinload(Event.created_by))
         .distinct()
     )
@@ -138,7 +161,19 @@ async def get_user_events(
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    query = query.order_by(Event.start_date.desc())
+
+    sort_mapping = {
+        "date": Event.start_date,
+        "popularity": Event.current_attendees,
+        "title": Event.title,
+        "created_at": Event.created_at,
+    }
+    sort_attr = sort_mapping.get(pagination.sort_by, Event.start_date) if pagination else Event.start_date
+
+    if pagination and pagination.order_by == "asc":
+        query = query.order_by(sort_attr.asc())
+    else:
+        query = query.order_by(sort_attr.desc())
 
     if pagination:
         offset = (pagination.page - 1) * pagination.size

@@ -17,6 +17,7 @@ A production-ready Event Management API built with FastAPI, featuring JWT authen
 - **Capacity Management**: Track attendees and enforce limits
 - **Advanced Filtering**: By status, location, date range, organizer, capacity
 - **Full-Text Search**: Search events by title and description
+- **Advanced Sorting**: Sort events by date, popularity (attendance), title, or creation date
 - **Pagination**: Efficient data retrieval with customizable page sizes
 
 ### Task Management
@@ -32,7 +33,7 @@ A production-ready Event Management API built with FastAPI, featuring JWT authen
 - **Attendance Tracking**: View registered attendees and waitlist
 
 ### Performance & Security
-- **Rate Limiting**: 3 requests/second (configurable per user/role)
+- **Dynamic Rate Limiting**: Role-based limits (Admin: 500/hr, Organizer: 200/hr, User: 100/hr)
 - **Redis Caching**: Ready for caching frequent queries
 - **Input Validation**: Comprehensive Pydantic validation
 - **Error Handling**: Detailed, consistent error responses
@@ -235,6 +236,14 @@ curl -X POST http://localhost:8000/events/{event_id}/register \
 
 ## 🧪 Testing
 
+⚠️ **IMPORTANT**: Tests clear the database between runs! You MUST use a separate test database.
+
+1. Create a test database: `createdb behemoth_test`
+2. Add the URL to your `.env` file:
+   ```env
+   POSTGRES_TEST_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/behemoth_test
+   ```
+
 ```bash
 # Run all tests
 uv run pytest -v tests/
@@ -242,9 +251,12 @@ uv run pytest -v tests/
 
 ## 📊 Rate Limiting
 
-The system implements a **Senior Assessment Grade** rate limiting policy:
-- **Rate**: 100 requests per hour.
+The system implements a **configurable role-based** rate limiting policy:
+- **Admin**: 500 requests per hour.
+- **Organizer**: 200 requests per hour.
+- **User/Guest**: 100 requests per hour.
 - **Identifier**: Custom logic that prioritizes JWT `sub` (User ID) to ensure per-user limiting, falling back to IP address for anonymous traffic.
+- **Configuration**: Limits are configurable via `.env` (`REQ_RATE_ADMIN`, `REQ_RATE_ORGANIZER`, `REQ_RATE_USER`, `REQ_RATE`, etc)
 - **Implementation**: Built with `FastAPILimiter` and Redis.
 
 ## 🐳 Docker Deployment
@@ -298,7 +310,7 @@ Key indexes for performance:
 - Only organizers can delete tasks
 
 ### Attendee Management
-- Registration only allowed for DRAFT and UPCOMING events
+- Registration and unregistration only allowed for UPCOMING events
 - Automatic waitlist when capacity reached
 - Automatic promotion from waitlist when spots available
 - Cannot register twice for the same event

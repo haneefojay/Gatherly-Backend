@@ -72,6 +72,7 @@ async def list_events(
     start_date_to: str | None = Query(None),
     organizer_id: uuid.UUID | None = Query(None),
     has_capacity: bool | None = Query(None),
+    is_archived: bool | None = Query(None),
     search: str | None = Query(None, description="Search in title and description"),
 ):
     """List events with filtering and search"""
@@ -82,11 +83,13 @@ async def list_events(
         start_date_to=start_date_to,
         organizer_id=organizer_id,
         has_capacity=has_capacity,
+        is_archived=is_archived,
     )
 
     cache_data = {
         "page": pagination.page,
         "size": pagination.size,
+        "sort_by": pagination.sort_by,
         "order_by": pagination.order_by,
         "filters": filters.model_dump() if hasattr(filters, "model_dump") else filters.__dict__,
         "search": search
@@ -127,9 +130,10 @@ async def get_my_events(
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
     pagination: PaginationParamsType = Depends(pagination_params),
+    is_archived: bool = Query(False),
 ):
     """Get current user's events"""
-    events, total = await get_user_events(session, current_user.id, pagination)
+    events, total = await get_user_events(session, current_user.id, pagination, is_archived)
 
     items = []
     for event in events:

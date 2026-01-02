@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -54,6 +55,7 @@ class Event(DBBase):
     status = Column(
         Enum(EventStatus), nullable=False, default=EventStatus.DRAFT, index=True
     )
+    is_archived = Column(Boolean, default=False, nullable=False, index=True)
     capacity = Column(Integer, nullable=False, default=100)
     current_attendees = Column(Integer, nullable=False, default=0)
     created_by_id = Column(

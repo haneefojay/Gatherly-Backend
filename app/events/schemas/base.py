@@ -36,6 +36,7 @@ class EventFilterParams(BaseModel):
     start_date_to: datetime | None = None
     organizer_id: UUID | None = None
     has_capacity: bool | None = None
+    is_archived: bool | None = None
 
     model_config = ConfigDict(
         json_schema_extra={

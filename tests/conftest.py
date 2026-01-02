@@ -17,7 +17,18 @@ settings.TESTING = True
 
 from sqlalchemy.pool import NullPool
 
-engine = create_async_engine(settings.POSTGRES_DATABASE_URL, echo=False, poolclass=NullPool)
+db_url = settings.POSTGRES_TEST_DATABASE_URL
+
+if not db_url:
+    db_url = settings.POSTGRES_DATABASE_URL
+
+if "test" not in db_url.split("/")[-1].split("?")[0].lower() and not settings.ALLOW_NON_TEST_DB:
+    raise RuntimeError(
+        f"SAFETY ERROR: Tests serve to wipe data! Target DB '{db_url}' does not look like a test DB. "
+        "Please set POSTGRES_TEST_DATABASE_URL in .env to a dedicated test database."
+    )
+
+engine = create_async_engine(db_url, echo=False, poolclass=NullPool)
 TestingSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 async def override_get_session() -> AsyncGenerator[AsyncSession, None]:

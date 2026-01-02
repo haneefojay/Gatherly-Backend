@@ -20,6 +20,14 @@ class EventCreate(EventBase):
             raise ValueError("start_date cannot be in the past")
         return v
 
+    @field_validator("status")
+    @classmethod
+    def validate_initial_status(cls, v: EventStatus):
+        """Validate initial status"""
+        if v not in [EventStatus.DRAFT, EventStatus.UPCOMING]:
+            raise ValueError("New events can only be created with status 'draft' or 'upcoming'")
+        return v
+
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
