@@ -16,7 +16,7 @@ services:
       behemoth_db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - behemoth_network
 
@@ -44,6 +44,11 @@ services:
       - 6379
     volumes:
       - redis_volume:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - behemoth_network
 

@@ -135,10 +135,27 @@ if settings.LOGFIRE_TOKEN and not settings.TESTING:
     logfire.instrument_asyncpg()
 
 
+from app.common.dependencies import get_session, get_redis_client
+
 @app.get("/health", include_in_schema=False)
-async def health(_: AsyncSession = Depends(get_session)):
-    """App Healthcheck"""
-    return {"status": "Ok!"}
+async def health(
+    session: AsyncSession = Depends(get_session),
+    redis_client = Depends(get_redis_client)
+):
+    """App Healthcheck with dependency verification"""
+    # Check Database
+    await session.execute(select(1))
+    
+    # Check Redis
+    await redis_client.ping()
+    
+    return {
+        "status": "healthy",
+        "services": {
+            "database": "online",
+            "redis": "online"
+        }
+    }
 
 
 rate_limit_deps = []
