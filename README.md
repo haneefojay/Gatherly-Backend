@@ -33,11 +33,11 @@ A production-ready Event Management API built with FastAPI, featuring JWT authen
 - **Attendance Tracking**: View registered attendees and waitlist
 
 ### Performance & Security
-- **Dynamic Rate Limiting**: Role-based limits (Admin: 500/hr, Organizer: 200/hr, User: 100/hr)
-- **Redis Caching**: Ready for caching frequent queries
-- **Input Validation**: Comprehensive Pydantic validation
-- **Error Handling**: Detailed, consistent error responses
-- **Database Optimization**: Proper indexes and eager loading
+- **Dynamic Rate Limiting**: Role-based limits (Admin: 500/hr, Organizer: 200/hr, User: 100/hr, Guest: 30/hr)
+- **Redis Caching**: Cache-aside implementation for frequent event list queries
+- **Live Health Monitoring**: `/health` endpoint with live DB and Redis connectivity verification
+- **Search Optimization**: Native Postgres Full-Text search for scalability
+- **Security Handlers**: Global exception handling that sanitizes sensitive DB errors in production
 
 ## 🏗️ Architecture
 
@@ -48,8 +48,7 @@ app/
 │   ├── models.py       # User, RefreshToken models
 │   ├── schemas/        # Request/response schemas
 │   ├── services.py     # Business logic
-│   ├── routes/         # API endpoints
-│   └── apis.py         # Router aggregation
+│   └── routes/         # API endpoints
 ├── events/             # Event management
 │   ├── models.py       # Event model with status workflow
 │   ├── schemas/        # Event schemas with validation
@@ -64,18 +63,21 @@ app/
 ├── attendees/          # Attendee management
 │   ├── models.py       # Attendee model with waitlist
 │   ├── schemas/        # Attendee schemas
-│   ├── services.py     # Registration logic
+│   ├── services.py     # Registration & waitlist logic
 │   └── routes/         # Attendee API endpoints
 ├── common/             # Shared utilities
-│   ├── auth.py         # JWT token generation/verification
-│   ├── permissions.py  # RBAC dependencies
-│   ├── cache.py        # Redis caching utilities
-│   ├── schemas.py      # Common response schemas
-│   └── exceptions.py   # Custom exceptions
+│   ├── auth.py         # JWT token implementation
+│   ├── permissions.py  # RBAC & ownership logic
+│   ├── cache.py        # Redis caching implementation
+│   ├── dependencies.py # Shared FastAPI dependencies
+│   ├── exceptions.py   # Custom exception system
+│   └── types.py        # Shared type definitions
 └── core/               # Core configuration
-    ├── database.py     # Database setup
-    ├── settings.py     # Environment configuration
-    └── handlers.py     # Exception handlers
+    ├── database.py     # SQLAlchemy async setup
+    ├── settings.py     # Pydantic settings (env)
+    ├── rate_limit.py   # Role-based rate limiting
+    ├── redis_utils.py  # Redis client management
+    └── handlers.py     # Global exception handlers
 ```
 
 ### Database Schema
@@ -92,11 +94,12 @@ app/
 
 ### Key Design Decisions
 
-1. **RBAC Implementation**: Permission-based access control using FastAPI dependencies
-2. **Status Workflow**: Enforced state transitions for event lifecycle
-3. **Waitlist System**: Automatic promotion when capacity becomes available
-4. **Token Strategy**: Short-lived access tokens with long-lived refresh tokens
-5. **Business Rules**: Strict validation preventing invalid operations
+1. **RBAC Implementation**: Permission-based access control using FastAPI dependencies and JWT role claims for performance
+2. **Search Architecture**: Utilized Postgres `TSVECTOR` with GIN indexing for efficient, scalable full-text search
+3. **Health Monitoring**: Implemented deep health checks that verify live connectivity to both PostgreSQL and Redis
+4. **Security Logic**: Automated sanitization of `IntegrityError` responses to prevent internal SQL database leakage
+5. **Waitlist System**: Automatic promotion when capacity becomes available via atomic database operations
+6. **Token Strategy**: Short-lived access tokens with long-lived refresh tokens and rotation
 
 ## 🚀 Setup Instructions
 
@@ -325,8 +328,8 @@ Key indexes for performance:
 
 ## 📬 Contact
 
-- **Email**: afeez@grandgale.tech
-- **GitHub**: [GrandGaleTechnologies](https://github.com/GrandGaleTechnologies)
+- **Candidate**: Haneef
+- **GitHub**: [haneefojay](https://github.com/haneefojay)
 
 ## 📄 License
 

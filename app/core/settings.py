@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # App
-    DEBUG: bool = True
+    DEBUG: bool = False
     TESTING: bool = False
     ALLOW_NON_TEST_DB: bool = False
 

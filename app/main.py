@@ -89,9 +89,8 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.DEBUG else None,
     contact={
-        "name": "GrandGale Technologies",
-        "url": "https://github.com/GrandGaleTechnologies",
-        "email": "contact@grandgale.tech",
+        "name": "Haneef",
+        "url": "https://github.com/haneefojay",
     },
 )
 
