@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, EmailStr, model_validator
 
 from app.events.models import EventStatus
 
@@ -54,11 +54,18 @@ class EventFilterParams(BaseModel):
 class AddOrganizerRequest(BaseModel):
     """Request to add organizer to event"""
 
-    user_id: UUID
+    user_id: UUID | None = None
+    email: EmailStr | None = None
+
+    @model_validator(mode='after')
+    def check_identifiers(self):
+        if not self.user_id and not self.email:
+            raise ValueError('Email must be provided')
+        return self
 
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
-            "example": {"user_id": "123e4567-e89b-12d3-a456-426614174002"}
+            "example": {"email": "organizer@example.com"}
         },
     )

@@ -45,8 +45,11 @@ async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
         Created user instance
 
     Raises:
-        ValidationException: If email already exists
+        ValidationException: If email already exists or admin role is specified
     """
+    if user_data.role == UserRole.ADMIN:
+        raise ValidationException("Cannot register with admin role")
+
     result = await session.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
 

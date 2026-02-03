@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.common.types import PaginationParamsType
 from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import EventFilterParams
+from app.users.models import User, UserRole
 
 
 async def get_event_by_id(session: AsyncSession, event_id: uuid.UUID) -> Event | None:
@@ -32,6 +33,7 @@ async def get_event_by_id(session: AsyncSession, event_id: uuid.UUID) -> Event |
 
 async def get_events(
     session: AsyncSession,
+    current_user: User | None = None,
     filters: EventFilterParams | None = None,
     pagination: PaginationParamsType | None = None,
     search_query: str | None = None,
@@ -40,6 +42,7 @@ async def get_events(
 
     Args:
         session: Database session
+        current_user: Current user context for visibility rules
         filters: Filter parameters
         pagination: Pagination parameters
         search_query: Full-text search query
@@ -51,6 +54,29 @@ async def get_events(
     query = select(Event).options(
         selectinload(Event.organizers), selectinload(Event.created_by)
     )
+
+    # Visibility Rules
+    is_admin = current_user and current_user.role == UserRole.ADMIN
+
+    if not is_admin:
+        # Statuses visible to general public
+        public_statuses = [EventStatus.UPCOMING, EventStatus.ONGOING]
+
+        if current_user:
+            # Users can see public events + events they created or organize
+            query = query.outerjoin(
+                event_organizers, Event.id == event_organizers.c.event_id
+            )
+            
+            visibility_condition = or_(
+                Event.status.in_(public_statuses),
+                Event.created_by_id == current_user.id,
+                event_organizers.c.user_id == current_user.id
+            )
+            query = query.where(visibility_condition).distinct()
+        else:
+            # Anonymous users only see public events
+            query = query.where(Event.status.in_(public_statuses))
 
 
     conditions = []
@@ -87,7 +113,7 @@ async def get_events(
         conditions.append(Event.is_archived == False)
 
     if search_query:
-        # Senior Tip: Using TSVECTOR for performance and scalability
+
         query = query.where(Event.search_vector.match(search_query))
 
     if conditions:

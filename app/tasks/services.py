@@ -13,7 +13,7 @@ from app.events.models import Event, EventStatus
 from app.events.services import check_event_permission
 from app.tasks.models import Task
 from app.tasks.schemas import TaskCreate, TaskUpdate
-from app.users.models import User
+from app.users.models import User, UserRole
 
 
 async def validate_assignee(
@@ -127,6 +127,16 @@ async def update_task(
             f"Cannot modify tasks for events with status '{event.status.value}'"
         )
 
+    # Restriction: Only Admin, Owner, or Assignee can update 'completed' status
+    if task_data.completed is not None and task_data.completed != task.completed:
+        is_admin = current_user.role == UserRole.ADMIN
+        is_assignee = task.assignee_id == current_user.id
+        
+        if not (is_admin or is_assignee):
+            raise ForbiddenException("Only the assignee or admin can update the completion status")
+        
+        task.completed = task_data.completed
+
     if task_data.title is not None and task_data.title != task.title:
         result = await session.execute(
             select(Task).where(Task.event_id == event.id, Task.title == task_data.title)
@@ -136,10 +146,10 @@ async def update_task(
                 f"Task with title '{task_data.title}' already exists for this event"
             )
         task.title = task_data.title
+    
     if task_data.description is not None:
         task.description = task_data.description
-    if task_data.completed is not None:
-        task.completed = task_data.completed
+        
     if task_data.assignee_id is not None:
         await validate_assignee(session, event, task_data.assignee_id)
         task.assignee_id = task_data.assignee_id

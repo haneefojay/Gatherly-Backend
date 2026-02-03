@@ -11,6 +11,7 @@ from app.common.dependencies import get_session, pagination_params
 from app.common.exceptions import EventNotFoundException
 from app.common.permissions import (
     CurrentUser,
+    OptionalCurrentUser,
     OrganizerOrAdminUser,
     require_resource_ownership,
 )
@@ -65,6 +66,7 @@ async def create_event_endpoint(
 )
 async def list_events(
     session: AsyncSession = Depends(get_session),
+    current_user: OptionalCurrentUser = None,
     pagination: PaginationParamsType = Depends(pagination_params),
     status_filter: EventStatus | None = Query(None, alias="status"),
     location: str | None = Query(None),
@@ -92,14 +94,15 @@ async def list_events(
         "sort_by": pagination.sort_by,
         "order_by": pagination.order_by,
         "filters": filters.model_dump() if hasattr(filters, "model_dump") else filters.__dict__,
-        "search": search
+        "search": search,
+        "user_context": str(current_user.id) if current_user else "guest",
     }
     cache = CacheManager(ttl=60, cache_prefix="events:list:", data=cache_data)
     cached_response = await cache.get()
     if cached_response:
         return cached_response
 
-    events, total = await get_events(session, filters, pagination, search)
+    events, total = await get_events(session, current_user, filters, pagination, search)
 
     items = []
     for event in events:

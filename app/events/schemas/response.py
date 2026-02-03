@@ -8,6 +8,9 @@ from app.events.models import EventStatus
 from app.events.schemas.base import EventBase
 
 
+from app.users.schemas.response import UserResponse
+
+
 class EventResponse(EventBase):
     """Event response schema"""
 
@@ -21,6 +24,7 @@ class EventResponse(EventBase):
     is_archived: bool
     available_spots: int
     organizer_ids: List[UUID] = []
+    organizers: List[UserResponse] = []
 
     model_config = ConfigDict(
         from_attributes=True,

@@ -1,4 +1,4 @@
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 
 from app.users.models import UserRole
 from app.users.schemas.base import UserBase
@@ -9,6 +9,14 @@ class UserCreate(UserBase):
 
     password: str
     role: UserRole = UserRole.USER
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: UserRole) -> UserRole:
+        """Prevent users from registering with admin role"""
+        if value == UserRole.ADMIN:
+            raise ValueError("Cannot register with admin role")
+        return value
 
     model_config = ConfigDict(
         extra="forbid",

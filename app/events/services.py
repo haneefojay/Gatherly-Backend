@@ -17,7 +17,6 @@ from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import AddOrganizerRequest, EventCreate, EventUpdate
 from app.users.models import User, UserRole
 
-# Valid status transitions
 STATUS_TRANSITIONS = {
     EventStatus.DRAFT: [EventStatus.UPCOMING, EventStatus.CANCELLED],
     EventStatus.UPCOMING: [EventStatus.ONGOING, EventStatus.CANCELLED],
@@ -25,6 +24,39 @@ STATUS_TRANSITIONS = {
     EventStatus.COMPLETED: [],
     EventStatus.CANCELLED: [],
 }
+
+
+
+async def check_event_permission(
+    session: AsyncSession, event: Event, user: User
+) -> None:
+    """Check if user has permission to modify event
+
+    Args:
+        session: Database session
+        event: Event to check
+        user: User to check permission for
+
+    Raises:
+        ForbiddenException: If user doesn't have permission
+    """
+    if user.role == UserRole.ADMIN:
+        return
+
+    if event.created_by_id == user.id:
+        return
+
+    result = await session.execute(
+        select(event_organizers).where(
+            event_organizers.c.event_id == event.id,
+            event_organizers.c.user_id == user.id,
+        )
+    )
+    if result.first():
+        return
+
+    raise ForbiddenException("You don't have permission to modify this event")
+
 
 
 async def create_event(
@@ -92,7 +124,7 @@ async def update_event(
         validate_status_transition(event.status, event_data.status)
 
     if event.status in [EventStatus.COMPLETED, EventStatus.CANCELLED]:
-        # Only allow updating is_archived
+
         updated_fields = event_data.model_dump(exclude_unset=True).keys()
         if any(field != "is_archived" for field in updated_fields):
             raise EventStatusException(
@@ -167,9 +199,14 @@ async def add_organizer(
     """
     await check_event_permission(session, event, current_user)
 
-    result = await session.execute(
-        select(User).where(User.id == organizer_data.user_id)
-    )
+    if organizer_data.email:
+        result = await session.execute(
+            select(User).where(User.email == organizer_data.email)
+        )
+    else:
+        result = await session.execute(
+            select(User).where(User.id == organizer_data.user_id)
+        )
     new_organizer = result.scalar_one_or_none()
 
     if not new_organizer:
@@ -190,7 +227,7 @@ async def add_organizer(
     result = await session.execute(
         select(event_organizers).where(
             event_organizers.c.event_id == event.id,
-            event_organizers.c.user_id == organizer_data.user_id,
+            event_organizers.c.user_id == new_organizer.id,
         )
     )
     if result.first():
@@ -198,7 +235,7 @@ async def add_organizer(
 
     await session.execute(
         insert(event_organizers).values(
-            event_id=event.id, user_id=organizer_data.user_id
+            event_id=event.id, user_id=new_organizer.id
         )
     )
 
@@ -229,6 +266,8 @@ async def remove_organizer(
         ForbiddenException: If user doesn't have permission
         ValidationException: If trying to remove last organizer
     """
+    await check_event_permission(session, event, current_user)
+
     result = await session.execute(select(User).where(User.id == organizer_id))
     target_user = result.scalar_one_or_none()
 
@@ -256,37 +295,6 @@ async def remove_organizer(
     await session.refresh(event, ["organizers"])
 
     return event
-
-
-async def check_event_permission(
-    session: AsyncSession, event: Event, user: User
-) -> None:
-    """Check if user has permission to modify event
-
-    Args:
-        session: Database session
-        event: Event to check
-        user: User to check permission for
-
-    Raises:
-        ForbiddenException: If user doesn't have permission
-    """
-    if user.role == UserRole.ADMIN:
-        return
-
-    if event.created_by_id == user.id:
-        return
-
-    result = await session.execute(
-        select(event_organizers).where(
-            event_organizers.c.event_id == event.id,
-            event_organizers.c.user_id == user.id,
-        )
-    )
-    if result.first():
-        return
-
-    raise ForbiddenException("You don't have permission to modify this event")
 
 
 def validate_status_transition(

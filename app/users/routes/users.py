@@ -3,10 +3,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
-from app.common.permissions import AdminUser, CurrentUser
+from app.common.permissions import AdminUser, CurrentUser, OrganizerOrAdminUser
+from app.users.models import User, UserRole
 from app.users.schemas import UserResponse, UserRoleUpdate, UserUpdate
 from app.users.services import update_user_role
 
@@ -36,7 +38,7 @@ async def update_current_user_profile(
     session: AsyncSession = Depends(get_session),
 ):
     """Update current user profile"""
-    # Update user fields
+
     if user_data.full_name is not None:
         current_user.full_name = user_data.full_name
     if user_data.email is not None:
@@ -63,3 +65,36 @@ async def update_user_role_endpoint(
     """Update user role (Admin only)"""
     user = await update_user_role(session, user_id, role_data.role)
     return user
+
+
+@router.get(
+    "",
+    response_model=list[UserResponse],
+    summary="List users",
+    description="List users with optional filtering. Organizer/Admin only.",
+)
+async def list_users(
+    role: UserRole | None = None,
+    search: str | None = None,
+    # Allow organizers to see this list for team management
+    current_user: OrganizerOrAdminUser = None, 
+    session: AsyncSession = Depends(get_session),
+):
+    """List users"""
+    query = select(User)
+    
+    if role:
+        query = query.where(User.role == role)
+        
+    if search:
+        query = query.where(
+            (User.email.ilike(f"%{search}%")) | 
+            (User.full_name.ilike(f"%{search}%"))
+        )
+        
+    # Limit to 20 results to avoid heavy load, as this is for autocomplete
+    query = query.limit(20)
+    
+    result = await session.execute(query)
+    users = result.scalars().all()
+    return users

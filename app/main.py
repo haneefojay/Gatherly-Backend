@@ -143,10 +143,9 @@ async def health(
     redis_client = Depends(get_redis_client)
 ):
     """App Healthcheck with dependency verification"""
-    # Check Database
+
     await session.execute(select(1))
     
-    # Check Redis
     await redis_client.ping()
     
     return {

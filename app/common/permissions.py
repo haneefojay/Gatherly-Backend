@@ -143,7 +143,34 @@ def require_role(*allowed_roles: UserRole):
     return check_role
 
 
+
+security_optional = HTTPBearer(auto_error=False)
+
+
+async def get_current_user_optional(
+    token_creds: HTTPAuthorizationCredentials | None = Depends(security_optional),
+    session: AsyncSession = Depends(get_session),
+) -> User | None:
+    """Get current user if authenticated, else None"""
+    if not token_creds:
+        return None
+    
+    try:
+        return await get_current_user(token_creds, session)
+    except UnauthorizedException:
+        # If token is invalid, treat as anonymous (or could raise)
+        # For mixed endpoints, usually safer to treat as anonymous if token is bad
+        # unless we strictly want to warn clients.
+        # Given the requirements, checking validity is safer.
+        # But get_current_user raises UnauthorizedException.
+        # If we want to allow "invalid token = guest", catch it.
+        # If we want "invalid token = 401", let it bubble.
+        # Let's let it bubble to help debugging (invalid token shouldn't happen normally).
+        raise
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+OptionalCurrentUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 OrganizerOrAdminUser = Annotated[
     User, Depends(require_role(UserRole.ADMIN, UserRole.ORGANIZER))

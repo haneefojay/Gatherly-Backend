@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.attendees.models import Attendee, AttendeeStatus
@@ -47,7 +48,7 @@ async def register_for_event_endpoint(
 
 
 @router.delete(
-    "/events/{event_id}/register",
+    "/events/{event_id}/unregister",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Unregister from event",
     description="Unregister the current user from an event",
@@ -68,6 +69,26 @@ async def unregister_from_event_endpoint(
 
 
 @router.get(
+    "/events/{event_id}/my-status",
+    response_model=AttendeeResponse | None,
+    summary="Get my attendee status",
+)
+async def get_my_attendee_status(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get request user's attendee status for this event"""
+    result = await session.execute(
+        select(Attendee).where(
+            Attendee.event_id == event_id,
+            Attendee.user_id == current_user.id
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+@router.get(
     "/events/{event_id}/attendees",
     response_model=list[AttendeeResponse],
     summary="List event attendees",
@@ -81,6 +102,7 @@ async def list_event_attendees(
     """List event attendees"""
     result = await session.execute(
         select(Attendee)
+        .options(selectinload(Attendee.user))
         .where(
             Attendee.event_id == event_id,
             Attendee.status == AttendeeStatus.REGISTERED,
@@ -105,6 +127,7 @@ async def list_event_waitlist(
     """List event waitlist"""
     result = await session.execute(
         select(Attendee)
+        .options(selectinload(Attendee.user))
         .where(
             Attendee.event_id == event_id,
             Attendee.status == AttendeeStatus.WAITLISTED,
