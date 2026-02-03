@@ -23,9 +23,10 @@ from app.events.schemas import (
     EventCreate,
     EventFilterParams,
     EventResponse,
+    EventStatsResponse,
     EventUpdate,
 )
-from app.events.selectors import get_event_by_id, get_events, get_user_events
+from app.events.selectors import get_event_by_id, get_event_stats, get_events, get_user_events
 from app.events.services import (
     add_organizer,
     create_event,
@@ -281,3 +282,23 @@ async def remove_organizer_endpoint(
     response.organizer_ids = [org.id for org in event.organizers]
 
     return response
+
+@router.get(
+    "/{event_id}/stats",
+    response_model=EventStatsResponse,
+    summary="Get event statistics",
+    description="Get detailed statistics for an event. Requires organizer or admin permissions.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_event_stats_endpoint(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+    event: Event = Depends(require_resource_ownership(Event, "event_id")),
+):
+    """Get event statistics"""
+    stats = await get_event_stats(session, event)
+    return stats

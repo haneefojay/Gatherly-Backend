@@ -12,6 +12,10 @@ from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import EventFilterParams
 from app.users.models import User, UserRole
 
+from app.tasks.models import Task
+from app.attendees.models import Attendee, AttendeeStatus
+from datetime import datetime
+
 
 async def get_event_by_id(session: AsyncSession, event_id: uuid.UUID) -> Event | None:
     """Get event by ID with eager loading
@@ -225,3 +229,58 @@ async def get_user_events(
     events = list(result.scalars().all())
 
     return events, total
+
+
+async def get_event_stats(session: AsyncSession, event: Event) -> dict:
+    """Calculate statistics for a specific event"""
+    
+    # Task stats
+    tasks_result = await session.execute(
+        select(
+            func.count(Task.id).label("total"),
+            func.count(Task.id).filter(Task.completed == True).label("completed")
+        ).where(Task.event_id == event.id)
+    )
+    task_stats = tasks_result.one()
+    total_tasks = task_stats.total
+    completed_tasks = task_stats.completed
+    pending_tasks = total_tasks - completed_tasks
+    task_completion_percentage = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+    
+    # Attendee stats
+    attendees_result = await session.execute(
+        select(
+            func.count(Attendee.id).filter(Attendee.status == AttendeeStatus.REGISTERED).label("registered"),
+            func.count(Attendee.id).filter(Attendee.status == AttendeeStatus.WAITLISTED).label("waitlisted"),
+            func.count(Attendee.id).filter(Attendee.status == AttendeeStatus.CANCELLED).label("cancelled")
+        ).where(Attendee.event_id == event.id)
+    )
+    attendee_stats = attendees_result.one()
+    
+    # Organizer stats - query directly to avoid lazy loading issues
+    organizers_result = await session.execute(
+        select(func.count()).select_from(event_organizers).where(event_organizers.c.event_id == event.id)
+    )
+    total_organizers = organizers_result.scalar() or 0
+    
+    capacity_usage_percentage = (attendee_stats.registered / event.capacity * 100) if event.capacity > 0 else 0
+    
+    days_until_event = None
+    if event.start_date:
+        now = datetime.utcnow()
+        if event.start_date > now:
+            days_until_event = (event.start_date - now).days
+
+    return {
+        "total_tasks": total_tasks,
+        "completed_tasks": completed_tasks,
+        "pending_tasks": pending_tasks,
+        "task_completion_percentage": round(task_completion_percentage, 2),
+        "total_organizers": total_organizers,
+        "total_attendees": attendee_stats.registered,
+        "waitlisted_attendees": attendee_stats.waitlisted,
+        "cancelled_attendees": attendee_stats.cancelled,
+        "capacity": event.capacity,
+        "capacity_usage_percentage": round(capacity_usage_percentage, 2),
+        "days_until_event": days_until_event
+    }

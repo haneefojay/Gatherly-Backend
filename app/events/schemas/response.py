@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 from uuid import UUID
 
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from app.events.models import EventStatus
 from app.events.schemas.base import EventBase
@@ -49,3 +49,20 @@ class EventResponse(EventBase):
             }
         },
     )
+    
+class EventStatsResponse(BaseModel):
+    """Event statistics response schema"""
+
+    total_tasks: int
+    completed_tasks: int
+    pending_tasks: int
+    task_completion_percentage: float
+    total_organizers: int
+    total_attendees: int
+    waitlisted_attendees: int
+    cancelled_attendees: int
+    capacity: int
+    capacity_usage_percentage: float
+    days_until_event: int | None
+
+    model_config = ConfigDict(from_attributes=True)
