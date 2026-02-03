@@ -147,6 +147,7 @@ async def update_event(
                 f"Cannot reduce capacity below current attendees ({event.current_attendees})"
             )
         event.capacity = event_data.capacity
+    old_status = event.status
     if event_data.status is not None:
         event.status = event_data.status
     if event_data.is_archived is not None:
@@ -156,6 +157,40 @@ async def update_event(
 
     await session.commit()
     await session.refresh(event)
+
+    # Notify if status changed
+    if event_data.status is not None and event_data.status != old_status:
+        from app.notifications.services import create_notification
+        from app.notifications.schemas import NotificationCreate
+        from app.notifications.models import NotificationType
+        from app.attendees.models import Attendee, AttendeeStatus
+        from app.core.database import DBBase
+        
+        # Get all organizers
+        organizer_ids = [org.id for org in event.organizers]
+        
+        # Get all registered attendees
+        attendees_result = await session.execute(
+            select(Attendee.user_id).where(
+                Attendee.event_id == event.id,
+                Attendee.status == AttendeeStatus.REGISTERED
+            )
+        )
+        attendee_ids = [row[0] for row in attendees_result.all()]
+        
+        all_concerned_users = list(set(organizer_ids + attendee_ids))
+        
+        for user_id in all_concerned_users:
+            await create_notification(
+                session,
+                NotificationCreate(
+                    user_id=user_id,
+                    type=NotificationType.EVENT_STATUS_CHANGE,
+                    title=f"Event Status Update: {event.title}",
+                    message=f"The status of '{event.title}' has been changed to {event.status.value}",
+                    link=f"/events/{event.id}"
+                )
+            )
 
     return event
 
@@ -241,6 +276,22 @@ async def add_organizer(
 
     await session.commit()
     await session.refresh(event, ["organizers"])
+
+    # Notify new organizer
+    from app.notifications.services import create_notification
+    from app.notifications.schemas import NotificationCreate
+    from app.notifications.models import NotificationType
+    
+    await create_notification(
+        session,
+        NotificationCreate(
+            user_id=new_organizer.id,
+            type=NotificationType.GENERAL,
+            title="Added as Event Organizer",
+            message=f"You have been added as an organizer for event: {event.title}",
+            link=f"/events/{event.id}"
+        )
+    )
 
     return event
 

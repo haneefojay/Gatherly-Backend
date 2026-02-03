@@ -79,6 +79,23 @@ async def create_task(
     await session.commit()
     await session.refresh(task)
 
+    # Notify assignee
+    if task.assignee_id:
+        from app.notifications.services import create_notification
+        from app.notifications.schemas import NotificationCreate
+        from app.notifications.models import NotificationType
+        
+        await create_notification(
+            session,
+            NotificationCreate(
+                user_id=task.assignee_id,
+                type=NotificationType.TASK_ASSIGNED,
+                title="New Task Assigned",
+                message=f"You have been assigned a new task: {task.title} for event {event.title}",
+                link=f"/events/{event.id}/tasks"
+            )
+        )
+
     return task
 
 
@@ -150,9 +167,26 @@ async def update_task(
     if task_data.description is not None:
         task.description = task_data.description
         
-    if task_data.assignee_id is not None:
+    if task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id:
         await validate_assignee(session, event, task_data.assignee_id)
         task.assignee_id = task_data.assignee_id
+        
+        # Notify new assignee
+        if task.assignee_id:
+            from app.notifications.services import create_notification
+            from app.notifications.schemas import NotificationCreate
+            from app.notifications.models import NotificationType
+            
+            await create_notification(
+                session,
+                NotificationCreate(
+                    user_id=task.assignee_id,
+                    type=NotificationType.TASK_ASSIGNED,
+                    title="Task Assigned to You",
+                    message=f"The task '{task.title}' for event {event.title} has been assigned to you",
+                    link=f"/events/{event.id}/tasks"
+                )
+            )
 
     await session.commit()
     await session.refresh(task)

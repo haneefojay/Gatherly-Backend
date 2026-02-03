@@ -42,6 +42,7 @@ class User(DBBase):
     assigned_tasks = relationship("Task", back_populates="assignee")
     attendances = relationship("Attendee", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
 
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"

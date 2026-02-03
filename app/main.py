@@ -30,6 +30,7 @@ from app.users.apis import router as users_router
 from app.events.apis import router as events_router
 from app.tasks.apis import router as tasks_router
 from app.attendees.apis import router as attendees_router
+from app.notifications.apis import router as notifications_router
 
 setup_logging()
 
@@ -186,4 +187,10 @@ app.include_router(
     attendees_router,
     tags=["Attendees"],
     dependencies=rate_limit_deps,
+)
+
+app.include_router(
+    notifications_router,
+    prefix="/notifications",
+    tags=["Notifications"],
 )

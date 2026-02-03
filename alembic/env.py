@@ -10,6 +10,7 @@ from app.attendees.models import Attendee  # noqa: F401
 from app.core.database import DBBase
 from app.core.settings import get_settings
 from app.events.models import Event, event_organizers  # noqa: F401
+from app.notifications.models import Notification  # noqa: F401
 from app.tasks.models import Task  # noqa: F401
 from app.users.models import RefreshToken, User  # noqa: F401
 
