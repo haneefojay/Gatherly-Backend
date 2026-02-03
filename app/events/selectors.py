@@ -113,8 +113,14 @@ async def get_events(
         conditions.append(Event.is_archived == False)
 
     if search_query:
-
-        query = query.where(Event.search_vector.match(search_query))
+        search_pattern = f"%{search_query.strip()}%"
+        conditions.append(
+            or_(
+                Event.title.ilike(search_pattern),
+                Event.description.ilike(search_pattern),
+                Event.location.ilike(search_pattern),
+            )
+        )
 
     if conditions:
         query = query.where(and_(*conditions))
@@ -150,6 +156,7 @@ async def get_user_events(
     user_id: uuid.UUID,
     pagination: PaginationParamsType | None = None,
     is_archived: bool = False,
+    search_query: str | None = None,
 ) -> tuple[List[Event], int]:
     """Get events created by or organized by a user
 
@@ -158,28 +165,37 @@ async def get_user_events(
         user_id: User ID
         pagination: Pagination parameters
         is_archived: Whether to fetch archived events
+        search_query: Search query for title, description, and location
 
     Returns:
         Tuple of (events list, total count)
     """
+    conditions = [
+        or_(
+            Event.created_by_id == user_id,
+            event_organizers.c.user_id == user_id,
+        )
+    ]
+
+    if is_archived:
+        conditions.append(Event.is_archived == True)
+    else:
+        conditions.append(Event.is_archived == False)
+
+    if search_query:
+        search_pattern = f"%{search_query.strip()}%"
+        conditions.append(
+            or_(
+                Event.title.ilike(search_pattern),
+                Event.description.ilike(search_pattern),
+                Event.location.ilike(search_pattern),
+            )
+        )
+
     query = (
         select(Event)
         .outerjoin(event_organizers, Event.id == event_organizers.c.event_id)
-        .where(
-            or_(
-                Event.created_by_id == user_id,
-                event_organizers.c.user_id == user_id,
-            )
-        )
-    )
-
-    if is_archived:
-        query = query.where(Event.is_archived == True)
-    else:
-        query = query.where(Event.is_archived == False)
-
-    query = (
-        query
+        .where(and_(*conditions))
         .options(selectinload(Event.organizers), selectinload(Event.created_by))
         .distinct()
     )

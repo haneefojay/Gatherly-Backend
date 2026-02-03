@@ -134,9 +134,10 @@ async def get_my_events(
     session: AsyncSession = Depends(get_session),
     pagination: PaginationParamsType = Depends(pagination_params),
     is_archived: bool = Query(False),
+    search: str | None = Query(None, description="Search in title and description"),
 ):
     """Get current user's events"""
-    events, total = await get_user_events(session, current_user.id, pagination, is_archived)
+    events, total = await get_user_events(session, current_user.id, pagination, is_archived, search)
 
     items = []
     for event in events:
