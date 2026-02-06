@@ -6,13 +6,16 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.attendees.models import Attendee  # noqa: F401
+from app.attendees.models import Attendee, Waitlist  # noqa: F401
 from app.core.database import DBBase
 from app.core.settings import get_settings
-from app.events.models import Event, event_organizers  # noqa: F401
-from app.notifications.models import Notification  # noqa: F401
+from app.events.models import Event, event_organizers, EventCategory, EventTag, event_tags, EventMedia  # noqa: F401
+from app.notifications.models import Notification, NotificationPreferences  # noqa: F401
 from app.tasks.models import Task  # noqa: F401
-from app.users.models import RefreshToken, User  # noqa: F401
+from app.users.models import RefreshToken, User, UserProfile, UserSession, LoginHistory, EmailVerificationToken, PasswordResetToken, TwoFactorAuth  # noqa: F401
+from app.ticketing.models import TicketType, TicketTier, Order, OrderItem, Transaction, Refund  # noqa: F401
+from app.social.models import Review, Comment, SavedEvent, Follow, Message  # noqa: F401
+from app.admin.models import AdminAuditLog, AdminSetting, FeatureFlag  # noqa: F401
 
 settings = get_settings()
 
