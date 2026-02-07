@@ -49,6 +49,7 @@ dependencies = [
     "pylint-plugin-utils==0.8.2",
     "pylint-pydantic==0.3.4",
     "pymongo>=4.13.2",
+    "pyotp>=2.9.0",
     "python-dotenv==1.0.1",
     "python-multipart==0.0.9",
     "pyyaml==6.0.1",

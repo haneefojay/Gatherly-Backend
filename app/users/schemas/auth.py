@@ -1,6 +1,6 @@
 """Authentication schemas"""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -8,6 +8,7 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str
+    totp_code: str | None = None
 
     class Config:
         json_schema_extra = {
@@ -72,4 +73,34 @@ class AccessTokenResponse(BaseModel):
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
             }
+        }
+
+
+class VerifyEmailRequest(BaseModel):
+    """Email verification request schema"""
+
+    token: str = Field(..., description="Verification token from email")
+
+    class Config:
+        json_schema_extra = {"example": {"token": "abc123def456"}}
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request schema"""
+
+    email: EmailStr
+
+    class Config:
+        json_schema_extra = {"example": {"email": "user@example.com"}}
+
+
+class ResetPasswordRequest(BaseModel):
+    """Reset password request schema"""
+
+    token: str = Field(..., description="Reset token from email")
+    new_password: str = Field(..., min_length=8, description="New password")
+
+    class Config:
+        json_schema_extra = {
+            "example": {"token": "abc123def456", "new_password": "NewSecurePass123!"}
         }

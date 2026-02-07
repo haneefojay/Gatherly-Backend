@@ -4,6 +4,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from typing import Optional
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -17,8 +18,8 @@ from app.common.exceptions import (
     ValidationException,
 )
 from app.core.settings import get_settings
-from app.users.models import RefreshToken, User, UserRole
-from app.users.schemas import UserCreate
+from app.users.models import RefreshToken, User, UserRole, UserSession
+from app.users.schemas import UserCreate, ProfileUpdate, SessionResponse
 
 settings = get_settings()
 ph = PasswordHasher()
@@ -232,3 +233,193 @@ async def update_user_role(
     await session.refresh(user)
 
     return user
+
+
+async def generate_email_verification_token(
+    session: AsyncSession, user: User
+) -> str:
+    """Generate email verification token
+
+    Args:
+        session: Database session
+        user: User instance
+
+    Returns:
+        Verification token string
+    """
+    from app.users.models import EmailVerificationToken
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    verification_token = EmailVerificationToken(
+        token_hash=token_hash,
+        user_id=user.id,
+        expires_at=datetime.utcnow() + timedelta(hours=24),
+    )
+
+    session.add(verification_token)
+    await session.commit()
+
+    return token
+
+
+async def verify_email_token(session: AsyncSession, token: str) -> User:
+    """Verify email verification token and mark email as verified
+
+    Args:
+        session: Database session
+        token: Verification token
+
+    Returns:
+        User instance
+
+    Raises:
+        UnauthorizedException: If token is invalid or expired
+    """
+    from app.users.models import EmailVerificationToken
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    result = await session.execute(
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == token_hash,
+            EmailVerificationToken.is_used == False,
+            EmailVerificationToken.expires_at > datetime.utcnow(),
+        )
+    )
+    verification_token = result.scalar_one_or_none()
+
+    if not verification_token:
+        raise UnauthorizedException("Invalid or expired verification token")
+
+    result = await session.execute(
+        select(User).where(User.id == verification_token.user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise NotFoundException("User not found")
+
+    user.email_verified = True
+    verification_token.is_used = True
+    verification_token.used_at = datetime.utcnow()
+
+    await session.commit()
+    await session.refresh(user)
+
+    return user
+
+
+async def generate_password_reset_token(
+    session: AsyncSession, email: str
+) -> tuple[User, str] | None:
+    """Generate password reset token
+
+    Args:
+        session: Database session
+        email: User email
+
+    Returns:
+        Tuple of (User, token) if user exists, None otherwise
+    """
+    from app.users.models import PasswordResetToken
+
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        return None
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    reset_token = PasswordResetToken(
+        token_hash=token_hash,
+        user_id=user.id,
+        expires_at=datetime.utcnow() + timedelta(hours=1),
+    )
+
+    session.add(reset_token)
+    await session.commit()
+
+    return (user, token)
+
+
+async def reset_password_with_token(
+    session: AsyncSession, token: str, new_password: str
+) -> User:
+    """Reset password using reset token
+
+    Args:
+        session: Database session
+        token: Reset token
+        new_password: New password
+
+    Returns:
+        User instance
+
+    Raises:
+        UnauthorizedException: If token is invalid or expired
+    """
+    from app.users.models import PasswordResetToken
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    result = await session.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.is_used == False,
+            PasswordResetToken.expires_at > datetime.utcnow(),
+        )
+    )
+    reset_token = result.scalar_one_or_none()
+
+    if not reset_token:
+        raise UnauthorizedException("Invalid or expired reset token")
+
+    result = await session.execute(
+        select(User).where(User.id == reset_token.user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise NotFoundException("User not found")
+
+    hashed_password = ph.hash(new_password)
+    user.hashed_password = hashed_password
+
+    reset_token.is_used = True
+    reset_token.used_at = datetime.utcnow()
+
+    await invalidate_all_user_sessions(session, user.id)
+
+    await session.commit()
+    await session.refresh(user)
+
+    return user
+
+
+async def invalidate_all_user_sessions(
+    session: AsyncSession, user_id: uuid.UUID
+) -> None:
+    """Invalidate all refresh tokens for a user
+
+    Args:
+        session: Database session
+        user_id: User ID
+    """
+    result = await session.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.is_revoked == False,
+        )
+    )
+    tokens = result.scalars().all()
+
+    for token in tokens:
+        token.is_revoked = True
+
+    await session.commit()
+
+

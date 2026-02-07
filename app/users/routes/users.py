@@ -10,7 +10,7 @@ from app.common.dependencies import get_session
 from app.common.permissions import AdminUser, CurrentUser, OrganizerOrAdminUser
 from app.users.models import User, UserRole
 from app.users.schemas import UserResponse, UserRoleUpdate, UserUpdate
-from app.users.services import update_user_role
+from app.users.services.users import update_user_role
 
 router = APIRouter()
 
