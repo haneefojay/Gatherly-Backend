@@ -6,6 +6,7 @@ from typing import Annotated, Type, TypeVar
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.auth import TokenGenerator
@@ -106,7 +107,11 @@ async def get_current_user(
 
     user_id = uuid.UUID(user_id_str)
 
-    result = await session.execute(select(User).where(User.id == user_id))
+    result = await session.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.id == user_id)
+    )
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active:

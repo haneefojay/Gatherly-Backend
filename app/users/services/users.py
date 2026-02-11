@@ -69,6 +69,16 @@ async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
     session.add(user)
     await session.commit()
     await session.refresh(user)
+    
+    # Save initial password to history
+    from app.users.models import PasswordHistory
+    
+    password_record = PasswordHistory(
+        user_id=user.id,
+        hashed_password=hashed_password
+    )
+    session.add(password_record)
+    await session.commit()
 
     return user
 
@@ -384,6 +394,36 @@ async def reset_password_with_token(
 
     if not user:
         raise NotFoundException("User not found")
+
+    from app.users.models import PasswordHistory
+    from app.common.exceptions import ValidationException
+    
+    result = await session.execute(
+        select(PasswordHistory)
+        .where(PasswordHistory.user_id == user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(5)
+    )
+    password_history = result.scalars().all()
+    
+    try:
+        ph.verify(user.hashed_password, new_password)
+        raise ValidationException("New password cannot be the same as your current password.")
+    except VerifyMismatchError:
+        pass
+    
+    for old_password in password_history:
+        try:
+            ph.verify(old_password.hashed_password, new_password)
+            raise ValidationException("Password was used recently. Please choose a different password.")
+        except VerifyMismatchError:
+            continue
+
+    password_record = PasswordHistory(
+        user_id=user.id,
+        hashed_password=user.hashed_password
+    )
+    session.add(password_record)
 
     hashed_password = ph.hash(new_password)
     user.hashed_password = hashed_password

@@ -98,6 +98,9 @@ class User(DBBase):
     
     # Admin relationships
     admin_audit_logs = relationship("AdminAuditLog", back_populates="admin", cascade="all, delete-orphan")
+    
+    # Password history
+    password_history = relationship("PasswordHistory", back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_users_role_status", "role", "status"),
@@ -157,7 +160,32 @@ class RefreshToken(DBBase):
     )
 
     def __repr__(self):
-        return f"<RefreshToken {self.id} for ushttp://127.0.0.1:8000/profile/me/sessionser {self.user_id}>"
+        return f"<RefreshToken {self.id} for user {self.user_id}>"
+
+
+class PasswordHistory(DBBase):
+    """Track password history to prevent reuse"""
+
+    __tablename__ = "password_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    hashed_password = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User", back_populates="password_history")
+
+    __table_args__ = (
+        Index("ix_password_history_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self):
+        return f"<PasswordHistory for user {self.user_id}>"
 
 
 class UserProfile(DBBase):

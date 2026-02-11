@@ -88,7 +88,7 @@ async def update_user_profile(
 async def change_user_password(
     session: AsyncSession, user: User, current_password: str, new_password: str
 ) -> None:
-    """Change user password
+    """Change user password with history check and session invalidation
 
     Args:
         session: Database session
@@ -98,13 +98,51 @@ async def change_user_password(
 
     Raises:
         UnauthorizedException: If current password is incorrect
+        ValidationException: If password was used recently
     """
+    from app.users.models import PasswordHistory, RefreshToken
+    from app.common.exceptions import ValidationException
+    
     try:
         ph.verify(user.hashed_password, current_password)
     except VerifyMismatchError:
         raise UnauthorizedException("Current password is incorrect")
 
+    result = await session.execute(
+        select(PasswordHistory)
+        .where(PasswordHistory.user_id == user.id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(5)
+    )
+    password_history = result.scalars().all()
+    
+    for old_password in password_history:
+        try:
+            ph.verify(old_password.hashed_password, new_password)
+            raise ValidationException("Password was used recently. Please choose a different password.")
+        except VerifyMismatchError:
+            continue
+
+    password_record = PasswordHistory(
+        user_id=user.id,
+        hashed_password=user.hashed_password
+    )
+    session.add(password_record)
+    
     user.hashed_password = ph.hash(new_password)
+    
+    await session.execute(
+        select(RefreshToken)
+        .where(RefreshToken.user_id == user.id)
+    )
+    result = await session.execute(
+        select(RefreshToken).where(RefreshToken.user_id == user.id)
+    )
+    tokens = result.scalars().all()
+    
+    for token in tokens:
+        token.is_revoked = True
+    
     await session.commit()
 
 

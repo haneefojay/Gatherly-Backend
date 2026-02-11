@@ -131,7 +131,31 @@ async def refresh_access_token(
     token_data: RefreshTokenRequest, session: AsyncSession = Depends(get_session)
 ):
     """Refresh access token using refresh token"""
+    from datetime import datetime
+    from app.users.models import RefreshToken, UserSession
+    import hashlib
+    
     user = await verify_refresh_token(session, token_data.refresh_token)
+    
+    # Update session last_active_at
+    token_hash = hashlib.sha256(token_data.refresh_token.encode()).hexdigest()
+    result = await session.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    refresh_token_record = result.scalar_one_or_none()
+    
+    if refresh_token_record:
+        # Find and update the associated session
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.refresh_token_id == refresh_token_record.id
+            )
+        )
+        user_session = result.scalar_one_or_none()
+        
+        if user_session:
+            user_session.last_active_at = datetime.utcnow()
+            await session.commit()
 
     access_token = await create_access_token(user)
 
