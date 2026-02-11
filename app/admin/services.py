@@ -17,15 +17,20 @@ from app.admin.models import AdminAuditLog
 
 
 async def authenticate_admin(
-    session: AsyncSession, email: str, password: str, totp_code: Optional[str] = None
+    session: AsyncSession, 
+    email: str, 
+    password: str, 
+    totp_code: Optional[str] = None,
+    ip_address: Optional[str] = None
 ) -> User:
-    """Authenticate admin user with mandatory 2FA
+    """Authenticate admin user with mandatory 2FA and optional IP whitelist
     
     Args:
         session: Database session
         email: Admin email
         password: Admin password
         totp_code: TOTP code (required for admins)
+        ip_address: IP address of the request
         
     Returns:
         Admin user instance
@@ -33,6 +38,8 @@ async def authenticate_admin(
     Raises:
         UnauthorizedException: If authentication fails or user is not admin
     """
+    from app.admin.models import AdminSetting
+    
     user = await authenticate_user(session, email, password)
     
     if not user:
@@ -40,6 +47,18 @@ async def authenticate_admin(
     
     if user.role != UserRole.ADMIN:
         raise UnauthorizedException("Admin access required")
+    
+    # Check IP whitelist if configured
+    if ip_address:
+        result = await session.execute(
+            select(AdminSetting).where(AdminSetting.key == "admin_ip_whitelist")
+        )
+        whitelist_setting = result.scalar_one_or_none()
+        
+        if whitelist_setting and whitelist_setting.value.get("enabled"):
+            allowed_ips = whitelist_setting.value.get("ips", [])
+            if allowed_ips and ip_address not in allowed_ips:
+                raise UnauthorizedException(f"IP address {ip_address} not whitelisted for admin access")
     
     has_2fa = await check_user_2fa_enabled(session, user.id)
     
@@ -61,8 +80,14 @@ async def log_admin_action(
     action: str,
     resource_type: str,
     resource_id: Optional[uuid.UUID] = None,
-    details: Optional[dict] = None,
+    before_state: Optional[dict] = None,
+    after_state: Optional[dict] = None,
+    changes: Optional[dict] = None,
     ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    method: Optional[str] = None,
+    status_code: Optional[int] = None,
 ) -> AdminAuditLog:
     """Log admin action to audit trail
     
@@ -72,8 +97,14 @@ async def log_admin_action(
         action: Action performed (e.g., "create", "update", "delete")
         resource_type: Type of resource (e.g., "user", "event", "setting")
         resource_id: ID of affected resource
-        details: Additional details about the action
+        before_state: Resource state before change
+        after_state: Resource state after change
+        changes: Specific fields that changed
         ip_address: IP address of admin
+        user_agent: User agent string
+        endpoint: API endpoint accessed
+        method: HTTP method
+        status_code: HTTP status code
         
     Returns:
         Created audit log entry
@@ -82,10 +113,15 @@ async def log_admin_action(
         admin_id=admin_id,
         action=action,
         resource_type=resource_type,
-        resource_id=resource_id,
-        details=details or {},
+        resource_id=str(resource_id) if resource_id else None,
+        before_state=before_state,
+        after_state=after_state,
+        changes=changes,
         ip_address=ip_address,
-        timestamp=datetime.utcnow(),
+        user_agent=user_agent,
+        endpoint=endpoint,
+        method=method,
+        status_code=status_code,
     )
     
     session.add(audit_log)
@@ -128,4 +164,141 @@ async def get_audit_logs(
     query = query.order_by(AdminAuditLog.timestamp.desc()).limit(limit)
     
     result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def check_admin_permission(
+    session: AsyncSession,
+    admin_id: uuid.UUID,
+    permission: str,
+    resource_type: Optional[str] = None
+) -> bool:
+    """Check if admin has specific permission
+    
+    Args:
+        session: Database session
+        admin_id: Admin user ID
+        permission: Permission to check (e.g., "user:write", "event:delete")
+        resource_type: Optional resource type filter
+        
+    Returns:
+        True if admin has permission, False otherwise
+    """
+    from app.admin.models import AdminPermission
+    
+    query = select(AdminPermission).where(
+        AdminPermission.admin_id == admin_id,
+        AdminPermission.permission == permission
+    )
+    
+    if resource_type:
+        query = query.where(
+            (AdminPermission.resource_type == resource_type) | 
+            (AdminPermission.resource_type == None)
+        )
+    
+    result = await session.execute(query)
+    return result.scalar_one_or_none() is not None
+
+
+async def grant_admin_permission(
+    session: AsyncSession,
+    admin_id: uuid.UUID,
+    permission: str,
+    resource_type: Optional[str] = None,
+    granted_by_id: Optional[uuid.UUID] = None
+) -> "AdminPermission":
+    """Grant permission to an admin
+    
+    Args:
+        session: Database session
+        admin_id: Admin user ID to grant permission to
+        permission: Permission to grant
+        resource_type: Optional resource type
+        granted_by_id: ID of admin granting the permission
+        
+    Returns:
+        Created permission record
+    """
+    from app.admin.models import AdminPermission
+    
+    # Check if permission already exists
+    result = await session.execute(
+        select(AdminPermission).where(
+            AdminPermission.admin_id == admin_id,
+            AdminPermission.permission == permission,
+            AdminPermission.resource_type == resource_type
+        )
+    )
+    existing = result.scalar_one_or_none()
+    
+    if existing:
+        return existing
+    
+    permission_record = AdminPermission(
+        admin_id=admin_id,
+        permission=permission,
+        resource_type=resource_type,
+        created_by_id=granted_by_id
+    )
+    
+    session.add(permission_record)
+    await session.commit()
+    await session.refresh(permission_record)
+    
+    return permission_record
+
+
+async def revoke_admin_permission(
+    session: AsyncSession,
+    admin_id: uuid.UUID,
+    permission: str,
+    resource_type: Optional[str] = None
+) -> bool:
+    """Revoke permission from an admin
+    
+    Args:
+        session: Database session
+        admin_id: Admin user ID
+        permission: Permission to revoke
+        resource_type: Optional resource type
+        
+    Returns:
+        True if permission was revoked, False if not found
+    """
+    from app.admin.models import AdminPermission
+    from sqlalchemy import delete
+    
+    query = delete(AdminPermission).where(
+        AdminPermission.admin_id == admin_id,
+        AdminPermission.permission == permission
+    )
+    
+    if resource_type:
+        query = query.where(AdminPermission.resource_type == resource_type)
+    
+    result = await session.execute(query)
+    await session.commit()
+    
+    return result.rowcount > 0
+
+
+async def get_admin_permissions(
+    session: AsyncSession,
+    admin_id: uuid.UUID
+) -> list["AdminPermission"]:
+    """Get all permissions for an admin
+    
+    Args:
+        session: Database session
+        admin_id: Admin user ID
+        
+    Returns:
+        List of permission records
+    """
+    from app.admin.models import AdminPermission
+    
+    result = await session.execute(
+        select(AdminPermission).where(AdminPermission.admin_id == admin_id)
+    )
     return list(result.scalars().all())

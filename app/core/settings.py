@@ -36,6 +36,26 @@ class Settings(BaseSettings):
     REQ_RATE_ADMIN: int = 500
     REQ_RATE_ORGANIZER: int = 200
 
+    # Email/SMTP Settings
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    FROM_EMAIL: str = ""
+    FROM_NAME: str = "Gatherly"
+    APP_URL: str = "http://localhost:3000"
+
+    # Storage Settings
+    STORAGE_PROVIDER: str = "local"
+    UPLOAD_DIR: str = "uploads"
+    MAX_AVATAR_SIZE_MB: int = 5
+    
+    # AWS S3 Settings (optional, for production)
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_S3_BUCKET: str | None = None
+    AWS_REGION: str = "us-east-1"
+
 
 @lru_cache
 def get_settings():

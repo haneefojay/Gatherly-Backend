@@ -17,6 +17,7 @@ from app.users.services.profile import (
     get_user_sessions,
     revoke_user_session,
 )
+from app.users.services.avatar import upload_user_avatar, delete_user_avatar
 import uuid
 
 router = APIRouter()
@@ -94,16 +95,30 @@ async def revoke_session(
     "/me/avatar",
     status_code=status.HTTP_200_OK,
     summary="Upload avatar",
-    description="Upload user avatar image",
+    description="Upload user avatar image (max 5MB, jpg/png/webp)",
 )
 async def upload_avatar(
+    current_user: CurrentUser,
     file: UploadFile = File(...),
-    current_user: CurrentUser = Depends(),
     session: AsyncSession = Depends(get_session),
 ):
-    """Upload user avatar (placeholder - implement with storage service)"""
-    return {
-        "message": "Avatar upload endpoint ready - integrate with storage service (S3/Azure Blob)",
-        "filename": file.filename,
-        "content_type": file.content_type,
-    }
+    """Upload user avatar"""
+    
+    avatar_url = await upload_user_avatar(session, current_user, file)
+    return {"avatar_url": avatar_url, "message": "Avatar uploaded successfully"}
+
+
+@router.delete(
+    "/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete avatar",
+    description="Remove user avatar image",
+)
+async def delete_avatar(
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete user avatar"""
+    
+    await delete_user_avatar(session, current_user)
+    return None

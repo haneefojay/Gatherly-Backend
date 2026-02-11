@@ -14,13 +14,13 @@ class EmailService:
     """Service for sending emails via SMTP"""
 
     def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_user = os.getenv("SMTP_USER", "")
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.from_email = os.getenv("FROM_EMAIL", self.smtp_user)
-        self.from_name = os.getenv("FROM_NAME", "Gatherly")
-        self.app_url = os.getenv("APP_URL", "http://localhost:3000")
+        self.smtp_host = settings.SMTP_HOST
+        self.smtp_port = settings.SMTP_PORT
+        self.smtp_user = settings.SMTP_USER
+        self.smtp_password = settings.SMTP_PASSWORD
+        self.from_email = settings.FROM_EMAIL or settings.SMTP_USER
+        self.from_name = settings.FROM_NAME
+        self.app_url = settings.APP_URL
 
     def send_email(
         self,
@@ -41,6 +41,8 @@ class EmailService:
             True if sent successfully, False otherwise
         """
         try:
+            import ssl
+            
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"{self.from_name} <{self.from_email}>"
@@ -50,10 +52,18 @@ class EmailService:
                 msg.attach(MIMEText(text_content, "plain"))
             msg.attach(MIMEText(html_content, "html"))
 
+            # Create a secure SSL context
+            context = ssl.create_default_context()
+            
+            # Connect with explicit TLS
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                
                 if self.smtp_user and self.smtp_password:
                     server.login(self.smtp_user, self.smtp_password)
+                    
                 server.send_message(msg)
 
             return True

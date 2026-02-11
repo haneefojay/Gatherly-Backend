@@ -39,7 +39,6 @@ class User(DBBase):
     status = Column(Enum(UserStatus), nullable=False, default=UserStatus.ACTIVE, index=True)
     email_verified = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    avatar_url = Column(String(500), nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -104,6 +103,31 @@ class User(DBBase):
         Index("ix_users_role_status", "role", "status"),
         Index("ix_users_email_verified", "email_verified"),
     )
+    
+    @property
+    def bio(self) -> str | None:
+        """Get bio from profile"""
+        return self.profile.bio if self.profile else None
+    
+    @property
+    def phone(self) -> str | None:
+        """Get phone from profile"""
+        return self.profile.phone if self.profile else None
+    
+    @property
+    def location(self) -> str | None:
+        """Get location from profile"""
+        return self.profile.location if self.profile else None
+    
+    @property
+    def avatar_url(self) -> str | None:
+        """Get avatar_url from profile"""
+        return self.profile.avatar_url if self.profile else None
+    
+    @property
+    def social_links(self) -> dict | None:
+        """Get social_links from profile"""
+        return self.profile.social_links if self.profile else None
 
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"
@@ -133,7 +157,7 @@ class RefreshToken(DBBase):
     )
 
     def __repr__(self):
-        return f"<RefreshToken {self.id} for user {self.user_id}>"
+        return f"<RefreshToken {self.id} for ushttp://127.0.0.1:8000/profile/me/sessionser {self.user_id}>"
 
 
 class UserProfile(DBBase):
@@ -152,6 +176,7 @@ class UserProfile(DBBase):
     bio = Column(Text, nullable=True)
     phone = Column(String(20), nullable=True)
     location = Column(String(255), nullable=True)
+    avatar_url = Column(String(500), nullable=True)
     social_links = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -176,13 +201,22 @@ class UserSession(DBBase):
         nullable=False,
         index=True
     )
+    refresh_token_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("refresh_tokens.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
     session_token = Column(String(500), unique=True, nullable=False, index=True)
+    device_info = Column(Text, nullable=True)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
+    last_active_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="sessions")
+    refresh_token = relationship("RefreshToken", foreign_keys=[refresh_token_id])
 
     __table_args__ = (
         Index("ix_user_sessions_user_expires", "user_id", "expires_at"),

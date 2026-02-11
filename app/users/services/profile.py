@@ -36,6 +36,9 @@ async def update_user_profile(
     Raises:
         ValidationException: If username already taken
     """
+    from sqlalchemy.orm import selectinload
+    from app.users.models import UserProfile
+    
     if profile_data.username and profile_data.username != user.username:
         result = await session.execute(
             select(User).where(User.username == profile_data.username)
@@ -45,11 +48,39 @@ async def update_user_profile(
             raise ValidationException("Username already taken")
 
     update_data = profile_data.model_dump(exclude_unset=True)
+    
+    # Separate User fields from UserProfile fields
+    user_fields = {"full_name", "username"}
+    profile_fields = {"bio", "phone", "location", "social_links"}
+    
+    # Update User table fields
     for field, value in update_data.items():
-        setattr(user, field, value)
+        if field in user_fields:
+            setattr(user, field, value)
+    
+    # Update UserProfile table fields
+    profile_updates = {k: v for k, v in update_data.items() if k in profile_fields}
+    if profile_updates:
+        # Load or create profile
+        result = await session.execute(
+            select(UserProfile).where(UserProfile.user_id == user.id)
+        )
+        profile = result.scalar_one_or_none()
+        
+        if not profile:
+            profile = UserProfile(user_id=user.id, **profile_updates)
+            session.add(profile)
+        else:
+            for field, value in profile_updates.items():
+                setattr(profile, field, value)
 
     await session.commit()
-    await session.refresh(user)
+    
+    # Eagerly load profile to avoid lazy-loading issues
+    result = await session.execute(
+        select(User).options(selectinload(User.profile)).where(User.id == user.id)
+    )
+    user = result.scalar_one()
 
     return user
 

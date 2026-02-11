@@ -1,6 +1,7 @@
 """Authentication routes"""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
@@ -25,6 +26,9 @@ from app.users.services.users import (
     revoke_refresh_token,
     verify_refresh_token,
     generate_email_verification_token,
+    reset_password_with_token,
+    generate_password_reset_token,
+    verify_email_token,
 )
 from app.external.email import email_service
 
@@ -39,8 +43,7 @@ router = APIRouter()
     description="Create a new user account with email and password",
 )
 async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_session)):
-    """Register a new user"""
-    
+    """Register a new user"""    
     
     user = await create_user(session, user_data)
     
@@ -57,10 +60,18 @@ async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_sess
     description="Authenticate user and receive access and refresh tokens",
 )
 async def login(
-    credentials: LoginRequest, session: AsyncSession = Depends(get_session)
+    credentials: LoginRequest, 
+    request: Request,
+    session: AsyncSession = Depends(get_session)
 ):
     """Login and receive JWT tokens"""
-    from app.users.twofa_service import check_user_2fa_enabled, verify_two_factor_code
+    from datetime import datetime, timedelta
+    from app.users.services.twofa import check_user_2fa_enabled, verify_two_factor_code
+    from app.users.models import UserSession, RefreshToken
+    from app.core.settings import get_settings
+    import hashlib
+    
+    settings = get_settings()
     
     user = await authenticate_user(session, credentials.email, credentials.password)
 
@@ -74,8 +85,35 @@ async def login(
         if not await verify_two_factor_code(session, user, credentials.totp_code):
             raise Unauthorized("Invalid two-factor authentication code")
 
+    # Update last login timestamp
+    user.last_login_at = datetime.utcnow()
+
     access_token = await create_access_token(user)
     refresh_token = await create_refresh_token(session, user)
+    
+    # Get refresh token ID from database
+    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
+    result = await session.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    refresh_token_record = result.scalar_one()
+    
+    # Create user session
+    user_agent = request.headers.get("user-agent", "Unknown")
+    client_ip = request.client.host if request.client else None
+    
+    user_session = UserSession(
+        user_id=user.id,
+        refresh_token_id=refresh_token_record.id,
+        session_token=token_hash[:100],  # Use part of token hash as session token
+        device_info=user_agent,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    session.add(user_session)
+    
+    await session.commit()
 
     return TokenResponse(
         access_token=access_token,
@@ -135,8 +173,6 @@ async def verify_email(
     data: VerifyEmailRequest, session: AsyncSession = Depends(get_session)
 ):
     """Verify email and auto-login"""
-    from app.users.services.user import verify_email_token
-    from app.users.schemas.auth import VerifyEmailRequest
     
     user = await verify_email_token(session, data.token)
     
@@ -159,9 +195,6 @@ async def forgot_password(
     data: ForgotPasswordRequest, session: AsyncSession = Depends(get_session)
 ):
     """Request password reset email"""
-    from app.users.services.user import generate_password_reset_token
-    from app.external.email import email_service
-    from app.users.schemas.auth import ForgotPasswordRequest
     
     result = await generate_password_reset_token(session, data.email)
     
@@ -182,8 +215,6 @@ async def reset_password(
     data: ResetPasswordRequest, session: AsyncSession = Depends(get_session)
 ):
     """Reset password with token"""
-    from app.users.services.user import reset_password_with_token
-    from app.users.schemas.auth import ResetPasswordRequest
     
     await reset_password_with_token(session, data.token, data.new_password)
     

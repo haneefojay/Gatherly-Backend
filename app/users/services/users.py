@@ -284,7 +284,7 @@ async def verify_email_token(session: AsyncSession, token: str) -> User:
     result = await session.execute(
         select(EmailVerificationToken).where(
             EmailVerificationToken.token_hash == token_hash,
-            EmailVerificationToken.is_used == False,
+            EmailVerificationToken.verified_at == None,
             EmailVerificationToken.expires_at > datetime.utcnow(),
         )
     )
@@ -302,8 +302,7 @@ async def verify_email_token(session: AsyncSession, token: str) -> User:
         raise NotFoundException("User not found")
 
     user.email_verified = True
-    verification_token.is_used = True
-    verification_token.used_at = datetime.utcnow()
+    verification_token.verified_at = datetime.utcnow()
 
     await session.commit()
     await session.refresh(user)
@@ -369,7 +368,7 @@ async def reset_password_with_token(
     result = await session.execute(
         select(PasswordResetToken).where(
             PasswordResetToken.token_hash == token_hash,
-            PasswordResetToken.is_used == False,
+            PasswordResetToken.used_at == None,
             PasswordResetToken.expires_at > datetime.utcnow(),
         )
     )
@@ -389,7 +388,6 @@ async def reset_password_with_token(
     hashed_password = ph.hash(new_password)
     user.hashed_password = hashed_password
 
-    reset_token.is_used = True
     reset_token.used_at = datetime.utcnow()
 
     await invalidate_all_user_sessions(session, user.id)

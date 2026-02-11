@@ -83,13 +83,13 @@ async def setup_two_factor(
     twofa = result.scalar_one_or_none()
     
     if twofa:
-        twofa.secret = secret
+        twofa.secret_key = secret
         twofa.backup_codes = backup_codes_hashed
         twofa.enabled = False
     else:
         twofa = TwoFactorAuth(
             user_id=user.id,
-            secret=secret,
+            secret_key=secret,
             backup_codes=backup_codes_hashed,
             enabled=False,
         )
@@ -126,10 +126,10 @@ async def verify_and_enable_two_factor(
     )
     twofa = result.scalar_one_or_none()
     
-    if not twofa or not twofa.secret:
+    if not twofa or not twofa.secret_key:
         raise NotFoundException("Two-factor authentication not set up")
     
-    totp = pyotp.TOTP(twofa.secret)
+    totp = pyotp.TOTP(twofa.secret_key)
     
     if not totp.verify(code, valid_window=1):
         raise UnauthorizedException("Invalid verification code")
@@ -164,7 +164,7 @@ async def verify_two_factor_code(
     if not twofa:
         return False
     
-    totp = pyotp.TOTP(twofa.secret)
+    totp = pyotp.TOTP(twofa.secret_key)
     if totp.verify(code, valid_window=1):
         return True
     
@@ -213,7 +213,7 @@ async def disable_two_factor(
             raise UnauthorizedException("Invalid 2FA code")
     
     twofa.enabled = False
-    twofa.secret = None
+    twofa.secret_key = None
     twofa.backup_codes = []
     await session.commit()
 

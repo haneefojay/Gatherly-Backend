@@ -23,8 +23,14 @@ class AdminAuditLog(DBBase):
     action = Column(String(100), nullable=False)
     resource_type = Column(String(50), nullable=False, index=True)
     resource_id = Column(String(255), nullable=True, index=True)
+    before_state = Column(JSONB, nullable=True)
+    after_state = Column(JSONB, nullable=True)
     changes = Column(JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    endpoint = Column(String(255), nullable=True)
+    method = Column(String(10), nullable=True)
+    status_code = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     admin = relationship("User", back_populates="admin_audit_logs")
@@ -55,6 +61,38 @@ class AdminSetting(DBBase):
 
     def __repr__(self):
         return f"<AdminSetting {self.key}>"
+
+
+class AdminPermission(DBBase):
+    """Granular permission system for admin users"""
+
+    __tablename__ = "admin_permissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    permission = Column(String(100), nullable=False, index=True)
+    resource_type = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    admin = relationship("User", foreign_keys=[admin_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        Index("ix_admin_permissions_admin_permission", "admin_id", "permission"),
+    )
+
+    def __repr__(self):
+        return f"<AdminPermission {self.permission} for admin {self.admin_id}>"
 
 
 class FeatureFlag(DBBase):

@@ -169,6 +169,43 @@ async def get_current_user_optional(
         raise
 
 
+def require_permission(permission: str, resource_type: str | None = None):
+    """Dependency factory to require specific admin permission
+    
+    Args:
+        permission: Permission string (e.g., "user:write", "event:delete")
+        resource_type: Optional resource type filter
+        
+    Returns:
+        Dependency function that checks permission
+        
+    Example:
+        @app.delete("/users/{id}", dependencies=[Depends(require_permission("user:delete"))])
+    """
+    
+    async def check_permission(
+        current_user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session)
+    ) -> User:
+        from app.admin.services import check_admin_permission
+        
+        # Only admins can have permissions
+        if current_user.role != UserRole.ADMIN:
+            raise ForbiddenException("Admin access required")
+        
+        # Check if admin has the specific permission
+        has_permission = await check_admin_permission(
+            session, current_user.id, permission, resource_type
+        )
+        
+        if not has_permission:
+            raise ForbiddenException(f"Missing required permission: {permission}")
+        
+        return current_user
+    
+    return check_permission
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 OptionalCurrentUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]

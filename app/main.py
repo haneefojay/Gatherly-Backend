@@ -32,6 +32,17 @@ from app.tasks.apis import router as tasks_router
 from app.attendees.apis import router as attendees_router
 from app.notifications.apis import router as notifications_router
 from app.admin.apis import router as admin_router
+# from app.social.apis import router as social_router
+# from app.ticketing.apis import router as ticketing_router
+
+# Import all models to ensure they are registered with SQLAlchemy
+from app.users import models as _user_models
+from app.events import models as _event_models
+from app.tasks import models as _task_models
+from app.attendees import models as _attendee_models
+from app.notifications import models as _notification_models
+from app.social import models as _social_models
+from app.ticketing import models as _ticketing_models
 
 setup_logging()
 
@@ -95,6 +106,17 @@ app = FastAPI(
         "url": "https://github.com/haneefojay",
     },
 )
+
+# Mount static files for local avatar storage
+if settings.STORAGE_PROVIDER == "local":
+    from fastapi.staticfiles import StaticFiles
+    import os
+    
+    upload_dir = settings.UPLOAD_DIR
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+    
+    app.mount(f"/{upload_dir}", StaticFiles(directory=upload_dir), name="uploads")
 
 origins = ["*"]
 

@@ -36,3 +36,11 @@ async def get_redis_client():
     """
     from app.core.redis_utils import RedisClient
     return await RedisClient.get_client()
+
+
+def get_session_context():
+    """
+    Get database session context manager for use outside of request dependency
+    (e.g., in middleware, background tasks)
+    """
+    return AsyncSessionLocal()

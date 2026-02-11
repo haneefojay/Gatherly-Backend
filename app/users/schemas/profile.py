@@ -11,6 +11,7 @@ class ProfileUpdate(BaseModel):
     bio: str | None = Field(None, max_length=500)
     phone: str | None = Field(None, max_length=20)
     location: str | None = Field(None, max_length=255)
+    social_links: dict | None = None
 
     class Config:
         json_schema_extra = {
