@@ -113,3 +113,69 @@ class FeatureFlag(DBBase):
     def __repr__(self):
         status = "ON" if self.is_enabled else "OFF"
         return f"<FeatureFlag {self.name}: {status}>"
+
+
+class AdminNote(DBBase):
+    """Admin notes on user accounts"""
+
+    __tablename__ = "admin_notes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    admin = relationship("User", foreign_keys=[admin_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("ix_admin_notes_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self):
+        return f"<AdminNote by {self.admin_id} on user {self.user_id}>"
+
+
+class ImpersonationSession(DBBase):
+    """Track admin impersonation sessions"""
+
+    __tablename__ = "impersonation_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    target_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    session_token = Column(String(500), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    admin = relationship("User", foreign_keys=[admin_id])
+    target_user = relationship("User", foreign_keys=[target_user_id])
+
+    __table_args__ = (
+        Index("ix_impersonation_sessions_admin", "admin_id", "created_at"),
+    )
+
+    def __repr__(self):
+        return f"<ImpersonationSession admin {self.admin_id} -> user {self.target_user_id}>"

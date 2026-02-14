@@ -22,6 +22,8 @@ class UserStatus(str, enum.Enum):
 
     ACTIVE = "active"
     SUSPENDED = "suspended"
+    BANNED = "banned"
+    PENDING = "pending"
     DELETED = "deleted"
 
 

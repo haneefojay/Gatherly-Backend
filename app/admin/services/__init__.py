@@ -48,7 +48,6 @@ async def authenticate_admin(
     if user.role != UserRole.ADMIN:
         raise UnauthorizedException("Admin access required")
     
-    # Check IP whitelist if configured
     if ip_address:
         result = await session.execute(
             select(AdminSetting).where(AdminSetting.key == "admin_ip_whitelist")
@@ -161,7 +160,7 @@ async def get_audit_logs(
     if action:
         query = query.where(AdminAuditLog.action == action)
     
-    query = query.order_by(AdminAuditLog.timestamp.desc()).limit(limit)
+    query = query.order_by(AdminAuditLog.created_at.desc()).limit(limit)
     
     result = await session.execute(query)
     return list(result.scalars().all())
@@ -222,7 +221,6 @@ async def grant_admin_permission(
     """
     from app.admin.models import AdminPermission
     
-    # Check if permission already exists
     result = await session.execute(
         select(AdminPermission).where(
             AdminPermission.admin_id == admin_id,
