@@ -104,3 +104,12 @@ class ResetPasswordRequest(BaseModel):
         json_schema_extra = {
             "example": {"token": "abc123def456", "new_password": "NewSecurePass123!"}
         }
+
+
+class ResendVerificationEmailRequest(BaseModel):
+    """Resend verification email request schema"""
+
+    email: EmailStr
+
+    class Config:
+        json_schema_extra = {"example": {"email": "user@example.com"}}

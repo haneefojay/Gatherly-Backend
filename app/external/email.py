@@ -82,7 +82,7 @@ class EmailService:
         Returns:
             True if sent successfully
         """
-        verify_url = f"{self.app_url}/verify-email?token={token}"
+        verify_url = f"{self.app_url}/auth/verify-email?token={token}"
         
         subject = "Verify Your Gatherly Account"
         
@@ -93,9 +93,9 @@ class EmailService:
             <style>
                 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #043927; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .header {{ background: #0f172a; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
                 .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
-                .button {{ display: inline-block; padding: 12px 24px; background: #00c28b; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+                .button {{ display: inline-block; padding: 12px 24px; background: #1337ec; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
                 .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #666; }}
             </style>
         </head>
@@ -108,7 +108,7 @@ class EmailService:
                     <p>Hi {user_name},</p>
                     <p>Thank you for signing up! Please verify your email address by clicking the button below:</p>
                     <center>
-                        <a href="{verify_url}" class="button">Verify Email Address</a>
+                        <a href="{verify_url}" class="button" style="color: white;">Verify Email Address</a>
                     </center>
                     <p>Or copy and paste this link into your browser:</p>
                     <p style="word-break: break-all; color: #666; font-size: 12px;">{verify_url}</p>
@@ -149,7 +149,7 @@ class EmailService:
         Returns:
             True if sent successfully
         """
-        reset_url = f"{self.app_url}/reset-password?token={token}"
+        reset_url = f"{self.app_url}/auth/reset-password?token={token}"
         
         subject = "Reset Your Gatherly Password"
         
@@ -160,9 +160,9 @@ class EmailService:
             <style>
                 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
                 .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #043927; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .header {{ background: #0f172a; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
                 .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
-                .button {{ display: inline-block; padding: 12px 24px; background: #00c28b; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+                .button {{ display: inline-block; padding: 12px 24px; background: #1337ec; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
                 .warning {{ background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; }}
                 .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #666; }}
             </style>
@@ -176,7 +176,7 @@ class EmailService:
                     <p>Hi {user_name},</p>
                     <p>We received a request to reset your password. Click the button below to create a new password:</p>
                     <center>
-                        <a href="{reset_url}" class="button">Reset Password</a>
+                        <a href="{reset_url}" class="button" style="color: white">Reset Password</a>
                     </center>
                     <p>Or copy and paste this link into your browser:</p>
                     <p style="word-break: break-all; color: #666; font-size: 12px;">{reset_url}</p>

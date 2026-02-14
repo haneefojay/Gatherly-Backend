@@ -10,6 +10,7 @@ from app.users.schemas.auth import (
     VerifyEmailRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ResendVerificationEmailRequest,
 )
 from app.users.schemas.base import UserBase
 from app.users.schemas.create import UserCreate
@@ -25,6 +26,14 @@ from app.users.schemas.twofa import (
     TwoFactorVerifyRequest,
     TwoFactorDisableRequest,
     BackupCodesResponse,
+)
+from app.users.schemas.public_profile import (
+    PublicProfileResponse,
+    UserPreferencesResponse,
+    UserPreferencesUpdate,
+    UserStatsResponse,
+    UserActivityItem,
+    UserActivityResponse,
 )
 
 __all__ = [
@@ -42,6 +51,7 @@ __all__ = [
     "VerifyEmailRequest",
     "ForgotPasswordRequest",
     "ResetPasswordRequest",
+    "ResendVerificationEmailRequest",
     "ProfileUpdate",
     "ChangePasswordRequest",
     "SessionResponse",
@@ -49,4 +59,10 @@ __all__ = [
     "TwoFactorVerifyRequest",
     "TwoFactorDisableRequest",
     "BackupCodesResponse",
+    "PublicProfileResponse",
+    "UserPreferencesResponse",
+    "UserPreferencesUpdate",
+    "UserStatsResponse",
+    "UserActivityItem",
+    "UserActivityResponse",
 ]

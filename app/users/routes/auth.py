@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
-from app.common.exceptions import Unauthorized
+from app.common.exceptions import Unauthorized, BadRequest
 from app.common.permissions import CurrentUser
+from app.users.models import User
 from app.users.schemas import (
     AccessTokenResponse,
     LoginRequest,
@@ -17,6 +18,7 @@ from app.users.schemas import (
     VerifyEmailRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ResendVerificationEmailRequest,
 )
 from app.users.services.users import (
     authenticate_user,
@@ -50,7 +52,14 @@ async def signup(user_data: UserCreate, session: AsyncSession = Depends(get_sess
     verification_token = await generate_email_verification_token(session, user)
     email_service.send_verification_email(user.email, verification_token, user.full_name)
     
-    return user
+    # Eagerly load profile to avoid lazy loading issues during response serialization
+    from sqlalchemy.orm import selectinload
+    result = await session.execute(
+        select(User).options(selectinload(User.profile)).where(User.id == user.id)
+    )
+    user_with_profile = result.scalar_one()
+    
+    return user_with_profile
 
 
 @router.post(
@@ -243,3 +252,31 @@ async def reset_password(
     await reset_password_with_token(session, data.token, data.new_password)
     
     return {"message": "Password reset successfully"}
+
+
+@router.post(
+    "/resend-verification-email",
+    status_code=status.HTTP_200_OK,
+    summary="Resend verification email",
+    description="Resend verification email to user if not verified yet",
+)
+async def resend_verification_email(
+    data: ResendVerificationEmailRequest, session: AsyncSession = Depends(get_session)
+):
+    """Resend verification email"""
+
+    result = await session.execute(
+        select(User).where(User.email == data.email)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        return {"message": "If the email is registered and not verified, a new verification link has been sent"}
+    
+    if user.email_verified:
+        return {"message": "Email is already verified"}
+    
+    verification_token = await generate_email_verification_token(session, user)
+    email_service.send_verification_email(user.email, verification_token, user.full_name)
+    
+    return {"message": "If the email is registered and not verified, a new verification link has been sent"}

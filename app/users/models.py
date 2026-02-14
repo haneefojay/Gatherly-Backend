@@ -68,6 +68,9 @@ class User(DBBase):
     # Profile relationship
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     
+    # Preferences relationship
+    preferences = relationship("UserPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    
     # Notification relationships
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     notification_preferences = relationship("NotificationPreferences", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -126,6 +129,11 @@ class User(DBBase):
     def avatar_url(self) -> str | None:
         """Get avatar_url from profile"""
         return self.profile.avatar_url if self.profile else None
+    
+    @property
+    def cover_photo_url(self) -> str | None:
+        """Get cover_photo_url from profile"""
+        return self.profile.cover_photo_url if self.profile else None
     
     @property
     def social_links(self) -> dict | None:
@@ -205,6 +213,7 @@ class UserProfile(DBBase):
     phone = Column(String(20), nullable=True)
     location = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)
+    cover_photo_url = Column(String(500), nullable=True)
     social_links = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
@@ -358,3 +367,34 @@ class TwoFactorAuth(DBBase):
     def __repr__(self):
         status = "enabled" if self.enabled else "disabled"
         return f"<TwoFactorAuth {status} for user {self.user_id}>"
+
+
+class UserPreferences(DBBase):
+    """User preferences for theme, language, timezone, etc."""
+
+    __tablename__ = "user_preferences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+    email_notifications = Column(Boolean, default=True, nullable=False)
+    language = Column(String(10), default="en", nullable=False)
+    theme = Column(String(10), default="light", nullable=False)
+    timezone = Column(String(50), default="UTC", nullable=False)
+    currency = Column(String(3), default="USD", nullable=False)
+    profile_visibility = Column(String(20), default="public", nullable=False)
+    show_attending_events = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    user = relationship("User", back_populates="preferences")
+
+    def __repr__(self):
+        return f"<UserPreferences for user {self.user_id}>"

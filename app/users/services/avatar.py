@@ -63,20 +63,17 @@ async def upload_user_avatar(
     
     storage = get_storage_provider()
     
-    # Load profile to check for existing avatar
     result = await session.execute(
         select(UserProfile).where(UserProfile.user_id == user.id)
     )
     profile = result.scalar_one_or_none()
     
-    # Delete old avatar if exists
     if profile and profile.avatar_url:
         try:
             await storage.delete(profile.avatar_url)
         except Exception:
             pass
     
-    # Upload new avatar
     folder = f"avatars/{user.id}"
     avatar_url = await storage.upload(
         file.file,
@@ -85,7 +82,6 @@ async def upload_user_avatar(
         folder=folder
     )
     
-    # Update or create profile with avatar_url
     if not profile:
         profile = UserProfile(user_id=user.id, avatar_url=avatar_url)
         session.add(profile)
@@ -106,8 +102,7 @@ async def delete_user_avatar(session: AsyncSession, user: User) -> None:
         user: Current user
     """
     from sqlalchemy import select
-    
-    # Load profile
+
     result = await session.execute(
         select(UserProfile).where(UserProfile.user_id == user.id)
     )
@@ -124,4 +119,68 @@ async def delete_user_avatar(session: AsyncSession, user: User) -> None:
         pass
     
     profile.avatar_url = None
+    await session.commit()
+
+
+async def upload_cover_photo(
+    session: AsyncSession, user: User, file: UploadFile
+) -> str:
+    """Upload user cover photo and update profile"""
+    from sqlalchemy import select
+
+    validate_avatar_file(file)
+
+    storage = get_storage_provider()
+
+    result = await session.execute(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    )
+    profile = result.scalar_one_or_none()
+
+    if profile and profile.cover_photo_url:
+        try:
+            await storage.delete(profile.cover_photo_url)
+        except Exception:
+            pass
+
+    folder = f"covers/{user.id}"
+    cover_url = await storage.upload(
+        file.file,
+        file.filename,
+        file.content_type or "image/jpeg",
+        folder=folder
+    )
+
+    if not profile:
+        profile = UserProfile(user_id=user.id, cover_photo_url=cover_url)
+        session.add(profile)
+    else:
+        profile.cover_photo_url = cover_url
+
+    await session.commit()
+    await session.refresh(profile)
+
+    return cover_url
+
+
+async def delete_cover_photo(session: AsyncSession, user: User) -> None:
+    """Delete user cover photo"""
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(UserProfile).where(UserProfile.user_id == user.id)
+    )
+    profile = result.scalar_one_or_none()
+
+    if not profile or not profile.cover_photo_url:
+        return
+
+    storage = get_storage_provider()
+
+    try:
+        await storage.delete(profile.cover_photo_url)
+    except Exception:
+        pass
+
+    profile.cover_photo_url = None
     await session.commit()
