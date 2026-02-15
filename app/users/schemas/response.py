@@ -22,6 +22,7 @@ class UserResponse(UserBase):
     location: str | None = None
     avatar_url: str | None = None
     social_links: dict | None = None
+    job_title: str | None = None
     
     created_at: datetime
     updated_at: datetime

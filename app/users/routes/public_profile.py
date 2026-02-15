@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
+from app.common.permissions import OptionalCurrentUser
 from app.events.schemas.response import EventResponse
 from app.users.schemas import PublicProfileResponse
 from app.users.services.public_profile import (
@@ -24,9 +25,14 @@ router = APIRouter()
 async def get_profile_by_username(
     username: str,
     session: AsyncSession = Depends(get_session),
+    current_user: OptionalCurrentUser = None,
 ):
     """Get public profile by username"""
-    return await get_public_profile(session, username)
+    return await get_public_profile(
+        session, 
+        username, 
+        current_user.id if current_user else None
+    )
 
 
 @router.get(
@@ -63,5 +69,43 @@ async def get_user_attending(
     events, total = await get_user_attending_events(session, username, limit, offset)
     return {
         "events": [EventResponse.model_validate(e) for e in events],
+        "total": total,
+    }
+
+
+@router.get(
+    "/{username}/reviews",
+    summary="Get reviews received by user",
+    description="View reviews for events organized by the user",
+)
+async def get_reviews(
+    username: str,
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get reviews received by user"""
+    from app.social.schemas import ReviewResponse
+    from app.users.services.public_profile import get_user_reviews
+
+    reviews, total = await get_user_reviews(session, username, limit, offset)
+    
+    return {
+        "reviews": [
+            ReviewResponse(
+                id=r.id,
+                rating=r.rating,
+                title=r.title,
+                content=r.content,
+                helpful_count=r.helpful_count,
+                created_at=r.created_at,
+                event_id=r.event_id,
+                event_title=r.event.title if r.event else None,
+                user_id=r.user_id,
+                user_name=r.user.full_name,
+                user_avatar=r.user.avatar_url,
+            )
+            for r in reviews
+        ],
         "total": total,
     }

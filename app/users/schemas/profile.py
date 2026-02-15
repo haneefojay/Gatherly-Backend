@@ -9,6 +9,7 @@ class ProfileUpdate(BaseModel):
     full_name: str | None = Field(None, min_length=1, max_length=255)
     username: str | None = Field(None, min_length=3, max_length=100)
     bio: str | None = Field(None, max_length=500)
+    job_title: str | None = Field(None, max_length=100)
     phone: str | None = Field(None, max_length=20)
     location: str | None = Field(None, max_length=255)
     social_links: dict | None = None

@@ -51,7 +51,7 @@ async def update_user_profile(
     
     # Separate User fields from UserProfile fields
     user_fields = {"full_name", "username"}
-    profile_fields = {"bio", "phone", "location", "social_links"}
+    profile_fields = {"bio", "phone", "location", "social_links", "job_title"}
     
     # Update User table fields
     for field, value in update_data.items():

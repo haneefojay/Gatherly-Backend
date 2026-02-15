@@ -116,6 +116,11 @@ class User(DBBase):
     def bio(self) -> str | None:
         """Get bio from profile"""
         return self.profile.bio if self.profile else None
+
+    @property
+    def job_title(self) -> str | None:
+        """Get job_title from profile"""
+        return self.profile.job_title if self.profile else None
     
     @property
     def phone(self) -> str | None:
@@ -212,6 +217,7 @@ class UserProfile(DBBase):
         index=True
     )
     bio = Column(Text, nullable=True)
+    job_title = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
     location = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)

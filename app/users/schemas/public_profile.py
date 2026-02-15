@@ -13,6 +13,7 @@ class PublicProfileResponse(BaseModel):
     id: UUID
     username: str | None = None
     full_name: str
+    job_title: str | None = None
     bio: str | None = None
     location: str | None = None
     avatar_url: str | None = None
@@ -20,6 +21,10 @@ class PublicProfileResponse(BaseModel):
     social_links: dict | None = None
     events_organized_count: int = 0
     events_attended_count: int = 0
+    average_rating: float | None = None
+    review_count: int = 0
+    rating_distribution: dict[int, int] = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
+    is_following: bool = False
     member_since: datetime
 
     model_config = ConfigDict(from_attributes=True)

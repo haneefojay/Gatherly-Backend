@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.common.dependencies import get_session
 from app.common.permissions import AdminUser, CurrentUser, OrganizerOrAdminUser
@@ -76,12 +77,11 @@ async def update_user_role_endpoint(
 async def list_users(
     role: UserRole | None = None,
     search: str | None = None,
-    # Allow organizers to see this list for team management
     current_user: OrganizerOrAdminUser = None, 
     session: AsyncSession = Depends(get_session),
 ):
     """List users"""
-    query = select(User)
+    query = select(User).options(selectinload(User.profile))
     
     if role:
         query = query.where(User.role == role)
