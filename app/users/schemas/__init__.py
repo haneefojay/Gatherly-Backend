@@ -20,6 +20,8 @@ from app.users.schemas.profile import (
     ProfileUpdate,
     ChangePasswordRequest,
     SessionResponse,
+    UserPreferences,
+    UserPreferencesUpdate2,
 )
 from app.users.schemas.twofa import (
     TwoFactorSetupResponse,
@@ -65,4 +67,6 @@ __all__ = [
     "UserStatsResponse",
     "UserActivityItem",
     "UserActivityResponse",
+    "UserPreferences",
+    "UserPreferencesUpdate2",
 ]

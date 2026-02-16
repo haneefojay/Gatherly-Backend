@@ -40,6 +40,14 @@ class UserPreferencesResponse(BaseModel):
     currency: str = "USD"
     profile_visibility: str = "public"
     show_attending_events: bool = True
+    is_profile_public: bool = True
+    allow_search_indexing: bool = False
+    show_email: bool = False
+    show_phone: bool = False
+    attendance_visibility: str = "Friends & Connections"
+    past_events_visible: bool = True
+    share_data_third_party: bool = False
+    share_analytics: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

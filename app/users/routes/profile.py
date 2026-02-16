@@ -14,6 +14,8 @@ from app.users.schemas import (
     UserPreferencesUpdate,
     UserStatsResponse,
     UserActivityResponse,
+    UserPreferences,
+    UserPreferencesUpdate2,
 )
 from app.users.services.profile import (
     update_user_profile,
@@ -148,27 +150,25 @@ async def upload_cover(
 
 @router.delete(
     "/me/cover-photo",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=dict,
     summary="Delete cover photo",
-    description="Remove user cover photo",
-)
-async def delete_cover(
+    description="Remove user cover photo",)
+async def delete_cover_photo(
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
 ):
-    """Delete user cover photo"""
-    await delete_cover_photo(session, current_user)
-    return None
-
+    """Delete current user's cover photo"""
+    await delete_user_cover_photo(session, current_user)
+    return {"message": "Cover photo deleted successfully"}
 
 @router.get(
     "/me/preferences",
-    response_model=UserPreferencesResponse,
+    response_model=UserPreferences,
     summary="Get user preferences",
-    description="Get current user's preferences (theme, language, timezone, etc.)",
+    description="Get user preferences (theme, language, timezone, currency, privacy)",
 )
 async def get_preferences(
-    current_user: CurrentUser,
+    current_user: CurrentUser, 
     session: AsyncSession = Depends(get_session),
 ):
     """Get user preferences"""
@@ -179,10 +179,10 @@ async def get_preferences(
     "/me/preferences",
     response_model=UserPreferencesResponse,
     summary="Update user preferences",
-    description="Update user preferences (theme, language, timezone, currency, privacy)",
+    description="Update user preferences (theme, language, timezone, currency)",
 )
 async def update_preferences(
-    data: UserPreferencesUpdate,
+    data: UserPreferencesUpdate2,
     current_user: CurrentUser,
     session: AsyncSession = Depends(get_session),
 ):

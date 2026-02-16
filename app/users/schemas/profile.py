@@ -41,6 +41,66 @@ class ChangePasswordRequest(BaseModel):
         }
 
 
+class UserPreferences(BaseModel):
+    """User preferences schema"""
+
+    language: str
+    theme: str
+    timezone: str
+    currency: str
+    is_profile_public: bool = True
+    allow_search_indexing: bool = False
+    show_email: bool = False
+    show_phone: bool = False
+    attendance_visibility: str = "Friends & Connections"
+    past_events_visible: bool = True
+    share_data_third_party: bool = False
+    share_analytics: bool = True
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "language": "en-US",
+                "theme": "dark",
+                "timezone": "America/Los_Angeles",
+                "currency": "USD",
+                "is_profile_public": True,
+                "allow_search_indexing": False,
+                "show_email": False,
+                "show_phone": False,
+                "attendance_visibility": "Friends & Connections",
+                "past_events_visible": True,
+                "share_data_third_party": False,
+                "share_analytics": True,
+            }
+        }
+
+
+class UserPreferencesUpdate2(BaseModel):
+    """User preferences update request schema"""
+
+    language: str | None = None
+    theme: str | None = None
+    timezone: str | None = None
+    currency: str | None = None
+    is_profile_public: bool | None = None
+    allow_search_indexing: bool | None = None
+    show_email: bool | None = None
+    show_phone: bool | None = None
+    attendance_visibility: str | None = None
+    past_events_visible: bool | None = None
+    share_data_third_party: bool | None = None
+    share_analytics: bool | None = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "language": "es-ES",
+                "theme": "light",
+            }
+        }
+
+
 class SessionResponse(BaseModel):
     """User session response schema"""
 

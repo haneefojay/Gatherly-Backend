@@ -222,7 +222,21 @@ class UserProfile(DBBase):
     location = Column(String(255), nullable=True)
     avatar_url = Column(String(500), nullable=True)
     cover_photo_url = Column(String(500), nullable=True)
-    social_links = Column(JSONB, nullable=True)
+    social_links = Column(JSONB, default={}, nullable=True)
+    preferences = Column(JSONB, default={
+        "language": "en-US",
+        "theme": "system",
+        "timezone": "UTC",
+        "currency": "USD",
+        "is_profile_public": True,
+        "allow_search_indexing": False,
+        "show_email": False,
+        "show_phone": False,
+        "attendance_visibility": "Friends & Connections",
+        "past_events_visible": True,
+        "share_data_third_party": False,
+        "share_analytics": True
+    }, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -397,6 +411,14 @@ class UserPreferences(DBBase):
     currency = Column(String(3), default="USD", nullable=False)
     profile_visibility = Column(String(20), default="public", nullable=False)
     show_attending_events = Column(Boolean, default=True, nullable=False)
+    is_profile_public = Column(Boolean, default=True, nullable=False)
+    allow_search_indexing = Column(Boolean, default=False, nullable=False)
+    show_email = Column(Boolean, default=False, nullable=False)
+    show_phone = Column(Boolean, default=False, nullable=False)
+    attendance_visibility = Column(String(50), default="Friends & Connections", nullable=False)
+    past_events_visible = Column(Boolean, default=True, nullable=False)
+    share_data_third_party = Column(Boolean, default=False, nullable=False)
+    share_analytics = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
