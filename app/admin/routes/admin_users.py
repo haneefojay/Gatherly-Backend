@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.dependencies import get_session
@@ -37,9 +37,13 @@ from app.admin.services.admin_users import (
     admin_reset_password,
     create_impersonation,
     add_admin_note,
+    delete_admin_note,
+    revoke_user_session,
+    revoke_all_user_sessions,
 )
 from app.admin.services.admin_analytics import get_user_stats, get_user_growth
 from app.admin.services.admin_bulk import execute_bulk_action
+from app.external.email import email_service
 
 router = APIRouter()
 
@@ -284,11 +288,20 @@ async def export_data_endpoint(
 async def reset_password_endpoint(
     user_id: UUID,
     admin_user: AdminUser,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     """Admin-initiated password reset"""
-    token = await admin_reset_password(session, admin_user, user_id)
-    return {"message": "Password reset token generated", "reset_token": token}
+    user, token = await admin_reset_password(session, admin_user, user_id)
+    
+    background_tasks.add_task(
+        email_service.send_password_reset_email, 
+        user.email, 
+        token, 
+        user.full_name
+    )
+    
+    return {"message": "Password reset token generated and email sent", "reset_token": token}
 
 
 @router.post(
@@ -327,3 +340,50 @@ async def add_note_endpoint(
         content=note.content,
         created_at=note.created_at,
     )
+
+
+@router.delete(
+    "/{user_id}/notes/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete admin note",
+    description="Delete an admin note from a user account",
+)
+async def delete_note_endpoint(
+    user_id: UUID,
+    note_id: UUID,
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete admin note"""
+    await delete_admin_note(session, admin_user, user_id, note_id)
+
+
+@router.delete(
+    "/{user_id}/sessions",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke all user sessions",
+    description="Terminate all active sessions and revoke all refresh tokens for a user",
+)
+async def revoke_all_sessions_endpoint(
+    user_id: UUID,
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Revoke all active sessions for a user"""
+    await revoke_all_user_sessions(session, admin_user, user_id)
+
+
+@router.delete(
+    "/{user_id}/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke specific user session",
+    description="Terminate a specific active session for a user",
+)
+async def revoke_session_endpoint(
+    user_id: UUID,
+    session_id: UUID,
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Revoke a specific user session"""
+    await revoke_user_session(session, admin_user, user_id, session_id)

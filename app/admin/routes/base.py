@@ -8,7 +8,7 @@ from app.common.dependencies import get_session
 from app.common.permissions import AdminUser
 from app.common.exceptions import NotFoundException
 from app.users.schemas import TokenResponse
-from app.users.services.users import create_access_token, create_refresh_token
+from app.users.services.users import create_access_token, create_refresh_token, record_login_history
 from app.admin.schemas import AdminLoginRequest, AuditLogResponse, PermissionResponse, GrantPermissionRequest
 from app.admin.services import authenticate_admin, get_audit_logs, log_admin_action
 import uuid
@@ -35,7 +35,8 @@ async def admin_login(
         credentials.email, 
         credentials.password, 
         credentials.totp_code,
-        ip_address=ip_address
+        ip_address=ip_address,
+        user_agent=request.headers.get("user-agent")
     )
 
     access_token = await create_access_token(admin_user)

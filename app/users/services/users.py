@@ -18,7 +18,7 @@ from app.common.exceptions import (
     ValidationException,
 )
 from app.core.settings import get_settings
-from app.users.models import RefreshToken, User, UserRole, UserSession
+from app.users.models import RefreshToken, User, UserRole, UserSession, LoginHistory
 from app.users.schemas import UserCreate, ProfileUpdate, SessionResponse
 
 settings = get_settings()
@@ -459,5 +459,28 @@ async def invalidate_all_user_sessions(
         token.is_revoked = True
 
     await session.commit()
+    return True
+
+async def record_login_history(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    success: bool,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    location: Optional[str] = None
+) -> LoginHistory:
+    """Record a login attempt in the history log"""
+    login_entry = LoginHistory(
+        user_id=user_id,
+        success=success,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        failure_reason=failure_reason,
+        location=location
+    )
+    session.add(login_entry)
+    await session.flush()
+    return login_entry
 
 

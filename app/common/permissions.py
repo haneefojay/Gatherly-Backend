@@ -20,7 +20,7 @@ from app.common.exceptions import (
 )
 from app.core.database import DBBase
 from app.core.settings import get_settings
-from app.users.models import User, UserRole
+from app.users.models import User, UserRole, UserSession
 
 settings = get_settings()
 
@@ -116,6 +116,14 @@ async def get_current_user(
 
     if not user or not user.is_active:
         raise UnauthorizedException("User not found or inactive")
+
+    # Verify that the user has at least one active session in the database.
+    # This enables immediate logout when sessions are invalidated.
+    session_exists = await session.execute(
+        select(UserSession).where(UserSession.user_id == user_id).limit(1)
+    )
+    if not session_exists.scalar_one_or_none():
+        raise UnauthorizedException("Session has been terminated")
 
     return user
 

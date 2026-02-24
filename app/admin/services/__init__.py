@@ -11,7 +11,7 @@ from app.common.exceptions import (
     UnauthorizedException,
 )
 from app.users.models import User, UserRole
-from app.users.services.users import authenticate_user
+from app.users.services.users import authenticate_user, record_login_history
 from app.users.services.twofa import check_user_2fa_enabled, verify_two_factor_code
 from app.admin.models import AdminAuditLog
 
@@ -21,7 +21,8 @@ async def authenticate_admin(
     email: str, 
     password: str, 
     totp_code: Optional[str] = None,
-    ip_address: Optional[str] = None
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None
 ) -> User:
     """Authenticate admin user with mandatory 2FA and optional IP whitelist
     
@@ -31,6 +32,7 @@ async def authenticate_admin(
         password: Admin password
         totp_code: TOTP code (required for admins)
         ip_address: IP address of the request
+        user_agent: User agent of the request
         
     Returns:
         Admin user instance
@@ -43,9 +45,31 @@ async def authenticate_admin(
     user = await authenticate_user(session, email, password)
     
     if not user:
+        # Check if user exists to log failure
+        result = await session.execute(select(User).where(User.email == email))
+        potential_user = result.scalar_one_or_none()
+        if potential_user:
+            await record_login_history(
+                session, 
+                potential_user.id, 
+                success=False, 
+                ip_address=ip_address, 
+                user_agent=user_agent,
+                failure_reason="Invalid credentials"
+            )
+            await session.commit()
         raise UnauthorizedException("Invalid credentials")
     
     if user.role != UserRole.ADMIN:
+        await record_login_history(
+            session, 
+            user.id, 
+            success=False, 
+            ip_address=ip_address, 
+            user_agent=user_agent,
+            failure_reason="Admin access required (User is not admin)"
+        )
+        await session.commit()
         raise UnauthorizedException("Admin access required")
     
     if ip_address:
@@ -57,18 +81,64 @@ async def authenticate_admin(
         if whitelist_setting and whitelist_setting.value.get("enabled"):
             allowed_ips = whitelist_setting.value.get("ips", [])
             if allowed_ips and ip_address not in allowed_ips:
+                await record_login_history(
+                    session, 
+                    user.id, 
+                    success=False, 
+                    ip_address=ip_address, 
+                    user_agent=user_agent,
+                    failure_reason="IP address not whitelisted"
+                )
+                await session.commit()
                 raise UnauthorizedException(f"IP address {ip_address} not whitelisted for admin access")
     
     has_2fa = await check_user_2fa_enabled(session, user.id)
     
     if not has_2fa:
+        await record_login_history(
+            session, 
+            user.id, 
+            success=False, 
+            ip_address=ip_address, 
+            user_agent=user_agent,
+            failure_reason="2FA mandatory for admin"
+        )
+        await session.commit()
         raise UnauthorizedException("Admin accounts must have 2FA enabled")
     
     if not totp_code:
+        await record_login_history(
+            session, 
+            user.id, 
+            success=False, 
+            ip_address=ip_address, 
+            user_agent=user_agent,
+            failure_reason="2FA code required"
+        )
+        await session.commit()
         raise UnauthorizedException("Two-factor authentication code required")
     
     if not await verify_two_factor_code(session, user, totp_code):
+        await record_login_history(
+            session, 
+            user.id, 
+            success=False, 
+            ip_address=ip_address, 
+            user_agent=user_agent,
+            failure_reason="Invalid 2FA code"
+        )
+        await session.commit()
         raise UnauthorizedException("Invalid two-factor authentication code")
+    
+    # Finally, record successful login
+    await record_login_history(
+        session, 
+        user.id, 
+        success=True, 
+        ip_address=ip_address, 
+        user_agent=user_agent
+    )
+    # The caller will commit in admin_login
     
     return user
 

@@ -231,6 +231,26 @@ async def get_user_detail(session: AsyncSession, user_id: uuid.UUID) -> dict:
         for note, admin in notes_result.all()
     ]
 
+    moderation_result = await session.execute(
+        select(AdminAuditLog, User)
+        .join(User, AdminAuditLog.admin_id == User.id)
+        .where(
+            AdminAuditLog.resource_type == "user",
+            AdminAuditLog.resource_id == str(user_id),
+        )
+        .order_by(AdminAuditLog.created_at.desc())
+    )
+    moderation_history = [
+        {
+            "id": str(log.id),
+            "action": log.action,
+            "admin_email": admin.email,
+            "changes": log.changes,
+            "created_at": log.created_at.isoformat(),
+        }
+        for log, admin in moderation_result.all()
+    ]
+
     return {
         "id": user.id,
         "email": user.email,
@@ -257,6 +277,7 @@ async def get_user_detail(session: AsyncSession, user_id: uuid.UUID) -> dict:
         "reviews_given": reviews_given,
         "reviews_received": reviews_received,
         "admin_notes": admin_notes,
+        "moderation_history": moderation_history,
     }
 
 
@@ -344,11 +365,66 @@ async def invalidate_user_sessions(session: AsyncSession, user_id: uuid.UUID) ->
     tokens_result = await session.execute(
         delete(RefreshToken).where(
             RefreshToken.user_id == user_id,
-            RefreshToken.revoked == False,
+            RefreshToken.is_revoked == False,
         )
     )
 
     return (sessions_result.rowcount or 0) + (tokens_result.rowcount or 0)
+
+
+async def revoke_user_session(
+    session: AsyncSession,
+    admin: User,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID,
+) -> None:
+    """Revoke a specific user session"""
+
+    # Verify session belongs to user
+    result = await session.execute(
+        select(UserSession).where(
+            UserSession.id == session_id,
+            UserSession.user_id == user_id,
+        )
+    )
+    user_session = result.scalar_one_or_none()
+    if not user_session:
+        raise NotFoundException("Session not found")
+
+    await session.delete(user_session)
+
+    await log_admin_action(
+        session,
+        admin_id=admin.id,
+        action="revoke_session",
+        resource_type="user",
+        resource_id=str(user_id),
+        changes={"session_id": str(session_id)},
+    )
+
+    await session.commit()
+
+
+async def revoke_all_user_sessions(
+    session: AsyncSession,
+    admin: User,
+    user_id: uuid.UUID,
+) -> int:
+    """Revoke all active sessions for a user"""
+
+    count = await invalidate_user_sessions(session, user_id)
+
+    await log_admin_action(
+        session,
+        admin_id=admin.id,
+        action="revoke_all_sessions",
+        resource_type="user",
+        resource_id=str(user_id),
+        changes={"revoked_count": count},
+    )
+
+    await session.commit()
+    return count
 
 
 async def suspend_user(
@@ -372,6 +448,13 @@ async def suspend_user(
     user.status = UserStatus.SUSPENDED
     user.is_active = False
 
+    # Set the expiry timestamp so Celery Beat can auto-lift the suspension
+    if duration_days is not None:
+        from datetime import timedelta
+        user.suspended_until = datetime.utcnow() + timedelta(days=duration_days)
+    else:
+        user.suspended_until = None  # permanent suspension
+
     await invalidate_user_sessions(session, user_id)
 
     await log_admin_action(
@@ -386,12 +469,14 @@ async def suspend_user(
             "reason": reason,
             "duration_days": duration_days,
             "permanent": duration_days is None,
+            "suspended_until": user.suspended_until.isoformat() if user.suspended_until else None,
         },
     )
 
     await session.commit()
     await session.refresh(user)
     return user
+
 
 
 async def ban_user(
@@ -626,7 +711,7 @@ async def admin_reset_password(
     session: AsyncSession,
     admin: User,
     user_id: uuid.UUID,
-) -> str:
+) -> tuple[User, str]:
     """Generate password reset token for a user (admin-initiated)"""
 
     from app.users.models import PasswordResetToken
@@ -636,13 +721,28 @@ async def admin_reset_password(
     if not user:
         raise NotFoundException("User not found")
 
+    import hashlib
+    from app.users.services.users import ph
+    from app.users.models import PasswordHistory
+
+    password_record = PasswordHistory(
+        user_id=user_id,
+        hashed_password=user.hashed_password,
+    )
+    session.add(password_record)
+
+    user.hashed_password = ph.hash(secrets.token_urlsafe(32))
+
     token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
     reset_token = PasswordResetToken(
         user_id=user_id,
-        token=token,
+        token_hash=token_hash,
         expires_at=datetime.utcnow() + timedelta(hours=24),
     )
     session.add(reset_token)
+
+    await invalidate_user_sessions(session, user_id)
 
     await log_admin_action(
         session,
@@ -653,7 +753,7 @@ async def admin_reset_password(
     )
 
     await session.commit()
-    return token
+    return user, token
 
 
 async def create_impersonation(
@@ -739,3 +839,35 @@ async def add_admin_note(
     await session.commit()
     await session.refresh(note)
     return note
+
+
+async def delete_admin_note(
+    session: AsyncSession,
+    admin: User,
+    user_id: uuid.UUID,
+    note_id: uuid.UUID,
+) -> None:
+    """Delete an admin note from a user account"""
+
+    result = await session.execute(
+        select(AdminNote).where(
+            AdminNote.id == note_id,
+            AdminNote.user_id == user_id,
+        )
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise NotFoundException("Note not found")
+
+    await session.delete(note)
+
+    await log_admin_action(
+        session,
+        admin_id=admin.id,
+        action="delete_note",
+        resource_type="user",
+        resource_id=str(user_id),
+        changes={"note_id": str(note_id)},
+    )
+
+    await session.commit()

@@ -28,6 +28,7 @@ from app.users.services.users import (
     revoke_refresh_token,
     verify_refresh_token,
     generate_email_verification_token,
+    record_login_history,
     reset_password_with_token,
     generate_password_reset_token,
     verify_email_token,
@@ -81,18 +82,60 @@ async def login(
     import hashlib
     
     settings = get_settings()
+    user_agent = request.headers.get("user-agent", "Unknown")
+    client_ip = request.client.host if request.client else None
     
     user = await authenticate_user(session, credentials.email, credentials.password)
 
     if not user:
+        # Log failure if user exists but password was wrong
+        result = await session.execute(select(User).where(User.email == credentials.email))
+        potential_user = result.scalar_one_or_none()
+        if potential_user:
+            await record_login_history(
+                session, 
+                potential_user.id, 
+                success=False, 
+                ip_address=client_ip, 
+                user_agent=user_agent,
+                failure_reason="Invalid password"
+            )
+            await session.commit()
         raise Unauthorized("Invalid email or password")
     
     if await check_user_2fa_enabled(session, user.id):
         if not credentials.totp_code:
+            await record_login_history(
+                session, 
+                user.id, 
+                success=False, 
+                ip_address=client_ip, 
+                user_agent=user_agent,
+                failure_reason="2FA code required"
+            )
+            await session.commit()
             raise Unauthorized("Two-factor authentication code required")
         
         if not await verify_two_factor_code(session, user, credentials.totp_code):
+            await record_login_history(
+                session, 
+                user.id, 
+                success=False, 
+                ip_address=client_ip, 
+                user_agent=user_agent,
+                failure_reason="Invalid 2FA code"
+            )
+            await session.commit()
             raise Unauthorized("Invalid two-factor authentication code")
+
+    # Log successful login
+    await record_login_history(
+        session, 
+        user.id, 
+        success=True, 
+        ip_address=client_ip, 
+        user_agent=user_agent
+    )
 
     # Update last login timestamp
     user.last_login_at = datetime.utcnow()
