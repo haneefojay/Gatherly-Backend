@@ -10,9 +10,13 @@ from app.users.models import User, UserStatus
 from app.admin.services import log_admin_action
 from app.admin.services.admin_users import (
     suspend_user,
+    unsuspend_user,
     verify_user,
     export_user_data,
 )
+from app.notifications.services import create_notification
+from app.notifications.schemas import NotificationCreate
+from app.notifications.models import NotificationType
 
 
 async def execute_bulk_action(
@@ -21,6 +25,7 @@ async def execute_bulk_action(
     action: str,
     user_ids: list[uuid.UUID],
     reason: Optional[str] = None,
+    duration_days: Optional[int] = None,
 ) -> dict:
     """Execute bulk action on multiple users"""
 
@@ -34,7 +39,11 @@ async def execute_bulk_action(
             if action == "suspend":
                 if not reason:
                     raise ValueError("Reason is required for suspend")
-                await suspend_user(session, admin, uid, reason)
+                await suspend_user(session, admin, uid, reason, duration_days=duration_days)
+                success_count += 1
+
+            elif action == "unsuspend":
+                await unsuspend_user(session, admin, uid)
                 success_count += 1
 
             elif action == "verify":
@@ -47,6 +56,22 @@ async def execute_bulk_action(
                 success_count += 1
 
             elif action == "email":
+                success_count += 1
+
+            elif action == "notify":
+                title = "Admin Notification"
+                message = reason or ""
+                if reason and ": " in reason:
+                    title, message = reason.split(": ", 1)
+                await create_notification(
+                    session,
+                    NotificationCreate(
+                        user_id=uid,
+                        type=NotificationType.GENERAL,
+                        title=title,
+                        message=message,
+                    ),
+                )
                 success_count += 1
 
         except Exception as e:

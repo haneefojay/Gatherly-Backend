@@ -145,6 +145,7 @@ async def bulk_action(
         action=data.action,
         user_ids=data.user_ids,
         reason=data.reason,
+        duration_days=data.duration_days,
     )
 
 

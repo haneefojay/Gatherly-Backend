@@ -141,9 +141,10 @@ class UserGrowthResponse(BaseModel):
 class BulkActionRequest(BaseModel):
     """Bulk action request"""
 
-    action: str = Field(..., pattern="^(suspend|verify|export|email)$")
+    action: str = Field(..., pattern="^(suspend|unsuspend|verify|export|email|notify)$")
     user_ids: list[UUID] = Field(..., min_length=1, max_length=100)
     reason: str | None = None
+    duration_days: int | None = None
 
 
 class BulkActionResponse(BaseModel):
