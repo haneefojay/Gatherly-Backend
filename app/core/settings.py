@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     STORAGE_PROVIDER: str = "local"
     UPLOAD_DIR: str = "uploads"
     MAX_AVATAR_SIZE_MB: int = 5
+    MAX_EVENT_MEDIA_SIZE_MB: int = 10
     
     # AWS S3 Settings (optional, for production)
     AWS_ACCESS_KEY_ID: str | None = None

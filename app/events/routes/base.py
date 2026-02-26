@@ -20,17 +20,26 @@ from app.common.types import PaginationParamsType
 from app.events.models import Event, EventStatus
 from app.events.schemas import (
     AddOrganizerRequest,
+    EventAnalyticsResponse,
     EventCreate,
     EventFilterParams,
     EventResponse,
     EventStatsResponse,
     EventUpdate,
 )
-from app.events.selectors import get_event_by_id, get_event_stats, get_events, get_user_events
+from app.events.selectors import (
+    get_event_analytics,
+    get_event_by_id,
+    get_event_by_slug,
+    get_event_stats,
+    get_events,
+    get_user_events,
+)
 from app.events.services import (
     add_organizer,
     create_event,
     delete_event,
+    publish_event,
     remove_organizer,
     update_event,
 )
@@ -76,6 +85,7 @@ async def list_events(
     organizer_id: uuid.UUID | None = Query(None),
     has_capacity: bool | None = Query(None),
     is_archived: bool | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
     search: str | None = Query(None, description="Search in title and description"),
 ):
     """List events with filtering and search"""
@@ -87,6 +97,7 @@ async def list_events(
         organizer_id=organizer_id,
         has_capacity=has_capacity,
         is_archived=is_archived,
+        category_id=category_id,
     )
 
     cache_data = {
@@ -302,3 +313,74 @@ async def get_event_stats_endpoint(
     """Get event statistics"""
     stats = await get_event_stats(session, event)
     return stats
+
+
+@router.patch(
+    "/{event_id}/publish",
+    response_model=EventResponse,
+    summary="Publish an event",
+    description="Transition a draft event to upcoming status. Validates required fields.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        409: {"model": ErrorResponse, "description": "Event not in draft status"},
+    },
+)
+async def publish_event_endpoint(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Publish a draft event"""
+    event = await get_event_by_id(session, event_id)
+    if not event:
+        raise EventNotFoundException(event_id)
+
+    event = await publish_event(session, event, current_user)
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+    return response
+
+
+@router.get(
+    "/slug/{slug}",
+    response_model=EventResponse,
+    summary="Get event by slug",
+    description="Get event details by its URL slug. Increments view count.",
+    responses={404: {"model": ErrorResponse, "description": "Event not found"}},
+)
+async def get_event_by_slug_endpoint(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get event by slug"""
+    event = await get_event_by_slug(session, slug)
+    if not event:
+        raise EventNotFoundException(slug)
+
+    response = EventResponse.model_validate(event)
+    response.organizer_ids = [org.id for org in event.organizers]
+    return response
+
+
+@router.get(
+    "/{event_id}/analytics",
+    response_model=EventAnalyticsResponse,
+    summary="Get event analytics",
+    description="Get analytics for an event: views, registrations, conversion rate, reviews.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Event not found"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_event_analytics_endpoint(
+    event_id: uuid.UUID,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+    event: Event = Depends(require_resource_ownership(Event, "event_id")),
+):
+    """Get event analytics"""
+    analytics = await get_event_analytics(session, event)
+    return analytics
+

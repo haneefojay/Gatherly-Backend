@@ -63,6 +63,7 @@ class Event(DBBase):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(255), nullable=False)
+    slug = Column(String(300), unique=True, nullable=True, index=True)
     description = Column(Text, nullable=True)
     start_date = Column(DateTime, nullable=False, index=True)
     end_date = Column(DateTime, nullable=False)
@@ -71,8 +72,11 @@ class Event(DBBase):
         Enum(EventStatus), nullable=False, default=EventStatus.DRAFT, index=True
     )
     is_archived = Column(Boolean, default=False, nullable=False, index=True)
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
     capacity = Column(Integer, nullable=False, default=100)
     current_attendees = Column(Integer, nullable=False, default=0)
+    views_count = Column(Integer, nullable=False, default=0)
     created_by_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
@@ -117,6 +121,7 @@ class Event(DBBase):
         Index("ix_events_search_vector", "search_vector", postgresql_using="gin"),
         Index("ix_events_status_start_date", "status", "start_date"),
         Index("ix_events_category_status", "category_id", "status"),
+        Index("ix_events_active_listing", "is_deleted", "status", "start_date"),
         UniqueConstraint("title", "start_date", "location", name="uq_event_title_date_loc"),
     )
 

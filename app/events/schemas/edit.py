@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -16,6 +17,7 @@ class EventUpdate(BaseModel):
     capacity: int | None = Field(None, gt=0)
     status: EventStatus | None = None
     is_archived: bool | None = None
+    category_id: UUID | None = None
 
     @field_validator("start_date")
     @classmethod

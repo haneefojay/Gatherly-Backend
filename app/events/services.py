@@ -1,5 +1,6 @@
 """Event business logic and services"""
 
+import re
 import uuid
 from datetime import datetime
 
@@ -16,6 +17,13 @@ from app.common.exceptions import (
 from app.events.models import Event, EventStatus, event_organizers
 from app.events.schemas import AddOrganizerRequest, EventCreate, EventUpdate
 from app.users.models import User, UserRole
+
+
+def generate_slug(title: str) -> str:
+    """Generate a URL-safe slug from an event title with uniqueness suffix"""
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    suffix = uuid.uuid4().hex[:8]
+    return f"{base}-{suffix}"
 
 STATUS_TRANSITIONS = {
     EventStatus.DRAFT: [EventStatus.UPCOMING, EventStatus.CANCELLED],
@@ -74,12 +82,14 @@ async def create_event(
     """
     event = Event(
         title=event_data.title,
+        slug=generate_slug(event_data.title),
         description=event_data.description,
         start_date=event_data.start_date,
         end_date=event_data.end_date,
         location=event_data.location,
         capacity=event_data.capacity,
         status=event_data.status,
+        category_id=getattr(event_data, "category_id", None),
         created_by_id=creator.id,
     )
 
@@ -152,6 +162,8 @@ async def update_event(
         event.status = event_data.status
     if event_data.is_archived is not None:
         event.is_archived = event_data.is_archived
+    if hasattr(event_data, "category_id") and event_data.category_id is not None:
+        event.category_id = event_data.category_id
 
     event.updated_at = datetime.utcnow()
 
@@ -196,7 +208,7 @@ async def update_event(
 
 
 async def delete_event(session: AsyncSession, event: Event, current_user: User) -> None:
-    """Delete an event
+    """Soft delete an event
 
     Args:
         session: Database session
@@ -206,8 +218,70 @@ async def delete_event(session: AsyncSession, event: Event, current_user: User) 
     Raises:
         ForbiddenException: If user doesn't have permission
     """
-    await session.delete(event)
+    event.is_deleted = True
+    event.deleted_at = datetime.utcnow()
+    event.updated_at = datetime.utcnow()
     await session.commit()
+
+
+async def publish_event(
+    session: AsyncSession,
+    event: Event,
+    current_user: User,
+) -> Event:
+    """Publish an event (draft -> upcoming)
+
+    Args:
+        session: Database session
+        event: Event to publish
+        current_user: User performing the action
+
+    Returns:
+        Updated event instance
+
+    Raises:
+        ForbiddenException: If user doesn't have permission
+        EventStatusException: If event is not in draft status
+        ValidationException: If required fields are missing
+    """
+    await check_event_permission(session, event, current_user)
+
+    if event.status != EventStatus.DRAFT:
+        raise EventStatusException(
+            f"Only draft events can be published. Current status: '{event.status.value}'"
+        )
+
+    if not event.title or not event.start_date or not event.end_date:
+        raise ValidationException(
+            "Event must have a title, start date, and end date before publishing"
+        )
+
+    if not event.location:
+        raise ValidationException("Event must have a location before publishing")
+
+    event.status = EventStatus.UPCOMING
+    event.updated_at = datetime.utcnow()
+    await session.commit()
+    await session.refresh(event, ["organizers"])
+
+    from app.notifications.services import create_notification
+    from app.notifications.schemas import NotificationCreate
+    from app.notifications.models import NotificationType
+
+    for org in event.organizers:
+        if org.id != current_user.id:
+            await create_notification(
+                session,
+                NotificationCreate(
+                    user_id=org.id,
+                    type=NotificationType.EVENT_STATUS_CHANGE,
+                    title=f"Event Published: {event.title}",
+                    message=f"The event '{event.title}' has been published and is now upcoming.",
+                    link=f"/events/{event.id}",
+                ),
+            )
+
+    return event
 
 
 async def add_organizer(

@@ -127,6 +127,64 @@ async def get_growth(
     return await get_user_growth(session, days=days)
 
 
+@router.get(
+    "/by-role",
+    summary="Get users by role",
+    description="User distribution by role for pie chart",
+)
+async def get_by_role(
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get user distribution by role"""
+    from app.admin.services.admin_analytics import get_users_by_role
+    return await get_users_by_role(session)
+
+
+@router.get(
+    "/by-status",
+    summary="Get users by status",
+    description="User distribution by status for bar chart",
+)
+async def get_by_status(
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+):
+    """Get user distribution by status"""
+    from app.admin.services.admin_analytics import get_users_by_status
+    return await get_users_by_status(session)
+
+
+@router.get(
+    "/retention",
+    summary="Get retention curve",
+    description="Retention curve data over first N days after signup",
+)
+async def get_retention(
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+    days: int = Query(30, ge=7, le=90),
+):
+    """Get retention curve data"""
+    from app.admin.services.admin_analytics import get_retention_curve
+    return await get_retention_curve(session, days=days)
+
+
+@router.get(
+    "/cohorts",
+    summary="Get cohort analysis",
+    description="Weekly cohort retention analysis table",
+)
+async def get_cohorts(
+    admin_user: AdminUser,
+    session: AsyncSession = Depends(get_session),
+    weeks: int = Query(8, ge=4, le=16),
+):
+    """Get cohort analysis data"""
+    from app.admin.services.admin_analytics import get_cohort_analysis
+    return await get_cohort_analysis(session, weeks=weeks)
+
+
 @router.post(
     "/bulk-action",
     response_model=BulkActionResponse,

@@ -27,7 +27,7 @@ from app.core.rate_limit import role_based_rate_limiter
 from app.core.settings import get_settings
 from app.core.tags import RouteTags
 from app.users.apis import router as users_router
-from app.events.apis import router as events_router
+from app.events.apis import router as events_router, categories_router as event_categories_router, tags_router as event_tags_router, media_router as event_media_router
 from app.tasks.apis import router as tasks_router
 from app.attendees.apis import router as attendees_router
 from app.notifications.apis import router as notifications_router
@@ -190,6 +190,27 @@ if not settings.TESTING:
 
 app.include_router(
     users_router,
+    dependencies=rate_limit_deps,
+)
+
+app.include_router(
+    event_categories_router,
+    prefix="/events/categories",
+    tags=["Event Categories"],
+    dependencies=rate_limit_deps,
+)
+
+app.include_router(
+    event_tags_router,
+    prefix="/events/tags",
+    tags=["Event Tags"],
+    dependencies=rate_limit_deps,
+)
+
+app.include_router(
+    event_media_router,
+    prefix="/events",
+    tags=["Event Media"],
     dependencies=rate_limit_deps,
 )
 

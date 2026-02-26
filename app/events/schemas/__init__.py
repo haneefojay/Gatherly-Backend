@@ -7,7 +7,15 @@ from app.events.schemas.base import (
 )
 from app.events.schemas.create import EventCreate
 from app.events.schemas.edit import EventUpdate
-from app.events.schemas.response import EventResponse, EventStatsResponse
+from app.events.schemas.response import (
+    AddTagsRequest,
+    CategoryResponse,
+    EventAnalyticsResponse,
+    EventResponse,
+    EventStatsResponse,
+    MediaResponse,
+    TagResponse,
+)
 
 __all__ = [
     "EventBase",
@@ -15,6 +23,11 @@ __all__ = [
     "EventUpdate",
     "EventResponse",
     "EventStatsResponse",
+    "EventAnalyticsResponse",
     "EventFilterParams",
     "AddOrganizerRequest",
+    "AddTagsRequest",
+    "CategoryResponse",
+    "TagResponse",
+    "MediaResponse",
 ]

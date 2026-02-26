@@ -17,6 +17,7 @@ class EventBase(BaseModel):
     end_date: datetime
     location: str | None = Field(None, max_length=255)
     capacity: int = Field(default=100, gt=0)
+    category_id: UUID | None = None
 
     @field_validator("end_date")
     @classmethod
@@ -37,6 +38,7 @@ class EventFilterParams(BaseModel):
     organizer_id: UUID | None = None
     has_capacity: bool | None = None
     is_archived: bool | None = None
+    category_id: UUID | None = None
 
     model_config = ConfigDict(
         json_schema_extra={

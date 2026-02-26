@@ -3,36 +3,50 @@
 import uuid
 from typing import List
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.common.types import PaginationParamsType
-from app.events.models import Event, EventStatus, event_organizers
+from app.events.models import Event, EventCategory, EventMedia, EventStatus, EventTag, event_organizers, event_tags
 from app.events.schemas import EventFilterParams
 from app.users.models import User, UserRole
 
 from app.tasks.models import Task
 from app.attendees.models import Attendee, AttendeeStatus
+from app.social.models import Review
 from datetime import datetime
 
 
 async def get_event_by_id(session: AsyncSession, event_id: uuid.UUID) -> Event | None:
-    """Get event by ID with eager loading
-
-    Args:
-        session: Database session
-        event_id: Event ID
-
-    Returns:
-        Event instance or None
-    """
+    """Get event by ID with eager loading (excludes soft-deleted)"""
     result = await session.execute(
         select(Event)
-        .where(Event.id == event_id)
+        .where(Event.id == event_id, Event.is_deleted == False)
         .options(selectinload(Event.organizers), selectinload(Event.created_by))
     )
     return result.scalar_one_or_none()
+
+
+async def get_event_by_slug(session: AsyncSession, slug: str) -> Event | None:
+    """Get event by slug with eager loading and increment views"""
+    result = await session.execute(
+        select(Event)
+        .where(Event.slug == slug, Event.is_deleted == False)
+        .options(
+            selectinload(Event.organizers),
+            selectinload(Event.created_by),
+            selectinload(Event.category),
+        )
+    )
+    event = result.scalar_one_or_none()
+    if event:
+        await session.execute(
+            sa_update(Event).where(Event.id == event.id).values(views_count=Event.views_count + 1)
+        )
+        await session.commit()
+        await session.refresh(event)
+    return event
 
 
 async def get_events(
@@ -57,7 +71,7 @@ async def get_events(
 
     query = select(Event).options(
         selectinload(Event.organizers), selectinload(Event.created_by)
-    )
+    ).where(Event.is_deleted == False)
 
     # Visibility Rules
     is_admin = current_user and current_user.role == UserRole.ADMIN
@@ -113,6 +127,9 @@ async def get_events(
             conditions.append(Event.is_archived == filters.is_archived)
         else:
             conditions.append(Event.is_archived == False)
+
+        if hasattr(filters, 'category_id') and filters.category_id:
+            conditions.append(Event.category_id == filters.category_id)
     else:
         conditions.append(Event.is_archived == False)
 
@@ -283,4 +300,113 @@ async def get_event_stats(session: AsyncSession, event: Event) -> dict:
         "capacity": event.capacity,
         "capacity_usage_percentage": round(capacity_usage_percentage, 2),
         "days_until_event": days_until_event
+    }
+
+
+async def get_categories_with_counts(session: AsyncSession) -> list[dict]:
+    """Get all event categories with their event counts"""
+    result = await session.execute(
+        select(
+            EventCategory.id,
+            EventCategory.name,
+            EventCategory.slug,
+            EventCategory.description,
+            EventCategory.icon,
+            EventCategory.color,
+            func.count(Event.id).filter(
+                Event.is_deleted == False,
+                Event.is_archived == False,
+            ).label("event_count"),
+        )
+        .outerjoin(Event, Event.category_id == EventCategory.id)
+        .group_by(EventCategory.id)
+        .order_by(EventCategory.name)
+    )
+    rows = result.all()
+    return [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "slug": row.slug,
+            "description": row.description,
+            "icon": row.icon,
+            "color": row.color,
+            "event_count": row.event_count,
+        }
+        for row in rows
+    ]
+
+
+async def get_events_by_category(
+    session: AsyncSession,
+    category_slug: str,
+    current_user: User | None = None,
+    pagination: PaginationParamsType | None = None,
+) -> tuple[list[Event], int, EventCategory | None]:
+    """Get events belonging to a specific category by slug"""
+    cat_result = await session.execute(
+        select(EventCategory).where(EventCategory.slug == category_slug)
+    )
+    category = cat_result.scalar_one_or_none()
+    if not category:
+        return [], 0, None
+
+    filters = EventFilterParams(category_id=category.id)
+    events, total = await get_events(session, current_user, filters, pagination)
+    return events, total, category
+
+
+async def get_popular_tags(session: AsyncSession, limit: int = 30) -> list[dict]:
+    """Get popular tags ordered by usage count"""
+    result = await session.execute(
+        select(
+            EventTag.id,
+            EventTag.name,
+            EventTag.slug,
+            func.count(event_tags.c.event_id).label("event_count"),
+        )
+        .outerjoin(event_tags, EventTag.id == event_tags.c.tag_id)
+        .group_by(EventTag.id)
+        .order_by(func.count(event_tags.c.event_id).desc())
+        .limit(limit)
+    )
+    rows = result.all()
+    return [
+        {
+            "id": str(row.id),
+            "name": row.name,
+            "slug": row.slug,
+            "event_count": row.event_count,
+        }
+        for row in rows
+    ]
+
+
+async def get_event_analytics(session: AsyncSession, event: Event) -> dict:
+    """Get analytics for a specific event (views, registrations, conversion rate)"""
+    registrations_result = await session.execute(
+        select(func.count(Attendee.id)).where(
+            Attendee.event_id == event.id,
+            Attendee.status == AttendeeStatus.REGISTERED,
+        )
+    )
+    registrations = registrations_result.scalar() or 0
+
+    reviews_result = await session.execute(
+        select(
+            func.count(Review.id).label("count"),
+            func.coalesce(func.avg(Review.rating), 0).label("avg_rating"),
+        ).where(Review.event_id == event.id)
+    )
+    review_stats = reviews_result.one()
+
+    views = event.views_count or 0
+    conversion_rate = (registrations / views * 100) if views > 0 else 0
+
+    return {
+        "views": views,
+        "registrations": registrations,
+        "conversion_rate": round(conversion_rate, 2),
+        "review_count": review_stats.count,
+        "average_rating": round(float(review_stats.avg_rating), 2),
     }
